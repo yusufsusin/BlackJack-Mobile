@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameStatus, CardType, GameState, PlayerHand } from './types';
 import { createDeck, calculateHandValue, getBestValue } from './utils/gameLogic';
@@ -31,10 +32,9 @@ const CasinoChip: React.FC<{
   const chipClass = `chip-${denom}`;
   
   // Refined text scaling for professional fit within the inlay circle
-  // Using specific sizes to ensure 3-digit values don't overflow
   let textScaleClass = "text-lg md:text-2xl";
   if (value >= 100) {
-    textScaleClass = "text-sm md:text-lg"; // Reduced for $100+ to fit in circle
+    textScaleClass = "text-sm md:text-lg"; 
   }
 
   return (
@@ -112,7 +112,9 @@ const App: React.FC = () => {
 
   const split = () => {
     const currentHand = gameState.playerHands[gameState.activeHandIndex];
-    if (gameState.money < currentHand.bet) {
+    const extraBet = currentHand.bet;
+
+    if (gameState.money < extraBet) {
       setGameState(prev => ({ ...prev, message: "NOT ENOUGH CASH TO SPLIT" }));
       return;
     }
@@ -128,25 +130,69 @@ const App: React.FC = () => {
 
     const hand1: PlayerHand = {
       cards: [card1, newCardForHand1],
-      bet: currentHand.bet,
+      bet: extraBet,
       isFinished: isAces,
       status: 'PLAYING'
     };
 
     const hand2: PlayerHand = {
       cards: [card2, newCardForHand2],
-      bet: currentHand.bet,
+      bet: extraBet,
       isFinished: isAces,
       status: 'PLAYING'
     };
 
+    // Auto-check for 21 on non-Ace splits to proceed sequentially
+    if (!isAces) {
+      const v1 = calculateHandValue(hand1.cards);
+      if (getBestValue(v1.total1, v1.total2) === 21) {
+        hand1.status = 'STAND';
+        hand1.isFinished = true;
+      }
+    }
+
+    // Add visual chips for the second bet in the split
+    const id = Date.now();
+    const potRect = potRef.current?.getBoundingClientRect();
+    if (potRect) {
+        const offsetX = (Math.random() - 0.5) * 80;
+        const offsetY = (Math.random() - 0.5) * 40;
+        const rotation = (Math.random() - 0.5) * 60;
+        const denom = extraBet >= 100 ? 100 : (extraBet >= 50 ? 50 : 10);
+        setChipsInPot(prev => [...prev, { id, value: extraBet, denom: denom as any, offsetX, offsetY, rotation }]);
+    }
+
+    setIsPotPopping(true);
+    setTimeout(() => setIsPotPopping(false), 300);
+
+    const nextHands = [hand1, hand2];
+    let nextActiveIndex = 0;
+    let nextStatus: GameStatus = 'PLAYING';
+    let nextDealerHand = gameState.dealerHand;
+
+    if (isAces) {
+      nextStatus = 'DEALER_TURN';
+      nextDealerHand = gameState.dealerHand.map(c => ({ ...c, isHidden: false }));
+    } else if (hand1.isFinished) {
+      nextActiveIndex = 1;
+      const v2 = calculateHandValue(hand2.cards);
+      if (getBestValue(v2.total1, v2.total2) === 21) {
+        hand2.status = 'STAND';
+        hand2.isFinished = true;
+        nextStatus = 'DEALER_TURN';
+        nextDealerHand = gameState.dealerHand.map(c => ({ ...c, isHidden: false }));
+      }
+    }
+
     setGameState(prev => ({
       ...prev,
-      money: prev.money - currentHand.bet,
+      money: prev.money - extraBet,
       deck: newDeck,
-      playerHands: [hand1, hand2],
-      status: isAces ? 'DEALER_TURN' : 'PLAYING',
-      message: isAces ? 'ACES SPLIT - ONE CARD EACH' : 'HAND 1 ACTIVE',
+      playerHands: nextHands,
+      activeHandIndex: nextActiveIndex,
+      status: nextStatus,
+      dealerHand: nextDealerHand,
+      message: isAces ? 'ACES SPLIT - ONE CARD EACH' : (hand1.isFinished ? 'HAND 1 COMPLETED' : 'HAND 1 ACTIVE'),
     }));
   };
 
@@ -195,7 +241,6 @@ const App: React.FC = () => {
     const { total2 } = calculateHandValue(updatedHand.cards);
     updatedHand.status = total2 > 21 ? 'BUST' : 'STAND';
 
-    // Add visual chips for the doubled bet
     const id = Date.now();
     const potRect = potRef.current?.getBoundingClientRect();
     if (potRect) {
@@ -203,7 +248,6 @@ const App: React.FC = () => {
         const offsetY = (Math.random() - 0.5) * 40;
         const rotation = (Math.random() - 0.5) * 60;
         const denom = extraBet >= 100 ? 100 : (extraBet >= 50 ? 50 : 10);
-        
         setChipsInPot(prev => [...prev, { id, value: extraBet, denom: denom as any, offsetX, offsetY, rotation }]);
     }
 
@@ -338,7 +382,6 @@ const App: React.FC = () => {
   const addChip = (value: number, denom: 10 | 50 | 100, e: React.MouseEvent<HTMLButtonElement>) => {
     if (gameState.money < tempBet + value) return;
     
-    // Selection pulse effect
     setActivePulseDenom(denom);
     setTimeout(() => setActivePulseDenom(null), 400);
 
@@ -377,7 +420,7 @@ const App: React.FC = () => {
                     currentActiveHand?.cards.length === 2 &&
                     gameState.money >= currentActiveHand.bet;
 
-  const isUserWinning = gameState.status === 'GAME_OVER' && gameState.message.includes('WIN');
+  const isUserWinning = gameState.status === 'GAME_OVER' && (gameState.message.includes('WIN') || gameState.message.includes('BLACKJACK'));
 
   return (
     <div className="flex flex-col h-screen felt-bg p-4 select-none overflow-hidden relative">
