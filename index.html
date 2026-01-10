@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -28,6 +29,10 @@
       }
 
       /* Animations */
+      @keyframes dealCard {
+        0% { transform: translateY(-200px) rotate(15deg); opacity: 0; }
+        100% { transform: translateY(0) rotate(0deg); opacity: 1; }
+      }
       @keyframes flyToPot {
         0% { transform: scale(1) translate(0, 0); opacity: 1; }
         100% { transform: scale(0.8) translate(var(--tw-translate-x), var(--tw-translate-y)); opacity: 1; }
@@ -60,6 +65,9 @@
         50% { box-shadow: 0 0 35px rgba(74, 222, 128, 0.6); }
       }
 
+      .animate-deal {
+        animation: dealCard 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) backwards;
+      }
       .animate-fly {
         animation: flyToPot 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
       }
@@ -119,7 +127,7 @@
 
       .chip-inlay {
         position: absolute;
-        inset: 20%; /* Increased inset slightly for better framing */
+        inset: 20%;
         border-radius: 50%;
         background: radial-gradient(circle at 35% 35%, #ffffff 0%, #d1d5db 100%);
         box-shadow: 
@@ -131,7 +139,7 @@
         align-items: center;
         justify-content: center;
         overflow: hidden;
-        padding: 4px; /* Internal padding for text safety */
+        padding: 4px;
       }
 
       /* Metallic ring with sheen */
@@ -140,7 +148,7 @@
         inset: 12%;
         border-radius: 50%;
         border: 2px solid;
-        border-color: rgba(255, 215, 0, 0.6); /* Gold hue */
+        border-color: rgba(255, 215, 0, 0.6);
         background: transparent;
         z-index: 2;
         box-shadow: 0 0 5px rgba(0,0,0,0.3);

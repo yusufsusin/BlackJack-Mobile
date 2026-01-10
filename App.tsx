@@ -28,10 +28,9 @@ const CasinoChip: React.FC<{
   sizeClass?: string; 
   className?: string; 
   style?: React.CSSProperties;
-}> = ({ value, denom, sizeClass = "w-16 h-16", className = "", style }) => {
+}> = ({ value, denom, sizeClass = "w-14 h-14 md:w-16 md:h-16", className = "", style }) => {
   const chipClass = `chip-${denom}`;
   
-  // Refined text scaling for professional fit within the inlay circle
   let textScaleClass = "text-lg md:text-2xl";
   if (value >= 100) {
     textScaleClass = "text-sm md:text-lg"; 
@@ -142,7 +141,6 @@ const App: React.FC = () => {
       status: 'PLAYING'
     };
 
-    // Auto-check for 21 on non-Ace splits to proceed sequentially
     if (!isAces) {
       const v1 = calculateHandValue(hand1.cards);
       if (getBestValue(v1.total1, v1.total2) === 21) {
@@ -151,7 +149,6 @@ const App: React.FC = () => {
       }
     }
 
-    // Add visual chips for the second bet in the split
     const id = Date.now();
     const potRect = potRef.current?.getBoundingClientRect();
     if (potRect) {
@@ -422,9 +419,11 @@ const App: React.FC = () => {
 
   const isUserWinning = gameState.status === 'GAME_OVER' && (gameState.message.includes('WIN') || gameState.message.includes('BLACKJACK'));
 
+  const actionButtonCount = 2 + (canDouble ? 1 : 0) + (canSplit ? 1 : 0);
+  const actionGridCols = actionButtonCount === 3 ? 'grid-cols-3' : 'grid-cols-2';
+
   return (
     <div className="flex flex-col h-screen felt-bg p-4 select-none overflow-hidden relative">
-      {/* Animation Layer */}
       {flyingChips.map(chip => (
         <CasinoChip
           key={chip.id}
@@ -440,20 +439,19 @@ const App: React.FC = () => {
         />
       ))}
 
-      {/* Header */}
-      <div className="flex justify-between items-center px-4 py-3 ios-glass rounded-2xl shadow-xl mt-safe mb-1 border border-white/5">
+      <div className="flex justify-between items-center px-4 py-2 ios-glass rounded-2xl shadow-xl mt-safe border border-white/5">
         <div className="flex flex-col">
-          <span className="text-[10px] text-white/40 font-black uppercase tracking-widest">Bankroll</span>
-          <span className="text-xl font-black text-green-400 leading-none">${gameState.money}</span>
+          <span className="text-[9px] text-white/40 font-black uppercase tracking-widest">Bankroll</span>
+          <span className="text-lg font-black text-green-400 leading-none">${gameState.money}</span>
         </div>
         <div className="flex flex-col items-end">
           <span className="text-[8px] text-white/40 font-black uppercase tracking-widest italic leading-none">Blackjack 3:2</span>
-          <span className="text-[10px] font-black text-white/20 uppercase tracking-tighter">Dealer stands on 17</span>
+          <span className="text-[10px] font-black text-white/20 uppercase tracking-tighter">S17 Stand</span>
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col justify-between py-1 relative min-h-0 overflow-y-auto">
-        <div className="w-full flex justify-center pt-10 md:pt-14">
+      <div className="flex-1 flex flex-col justify-around py-1 relative min-h-0 overflow-y-auto">
+        <div className="w-full flex justify-center pt-6">
           <Hand 
             position="top" 
             cards={gameState.dealerHand} 
@@ -461,15 +459,15 @@ const App: React.FC = () => {
           />
         </div>
 
-        <div className="text-center px-4 h-6 flex items-center justify-center">
-           <h2 className={`text-lg font-black tracking-tighter uppercase italic drop-shadow-lg transition-colors duration-500 ${isUserWinning ? 'text-green-400 scale-110' : 'text-white/90'}`}>
+        <div className="text-center px-4 h-6 flex items-center justify-center my-1">
+           <h2 className={`text-base md:text-lg font-black tracking-tighter uppercase italic drop-shadow-lg transition-all duration-500 ${isUserWinning ? 'text-green-400 scale-105' : 'text-white/90'}`}>
              {gameState.message}
            </h2>
         </div>
 
-        <div className={`w-full flex ${gameState.playerHands.length > 1 ? 'flex-row justify-around' : 'flex-col items-center'} pb-4 transition-all duration-500`}>
+        <div className={`w-full flex ${gameState.playerHands.length > 1 ? 'flex-row justify-around' : 'flex-col items-center'} transition-all duration-500`}>
           {gameState.playerHands.map((hand, idx) => (
-            <div key={idx} className={`flex flex-col items-center transition-all duration-300 ${gameState.activeHandIndex === idx ? 'scale-105 opacity-100' : 'scale-90 opacity-40 grayscale'}`}>
+            <div key={idx} className={`flex flex-col items-center transition-all duration-300 ${gameState.activeHandIndex === idx ? 'scale-100 opacity-100' : 'scale-90 opacity-40 grayscale'}`}>
               <Hand 
                 position="bottom" 
                 cards={hand.cards} 
@@ -481,20 +479,18 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* Controls */}
       <div className="pb-8 pt-1 px-1 flex flex-col gap-1">
         <div className="relative flex flex-col items-center">
           <div className={`backdrop-blur-xl px-4 py-1 rounded-full border flex items-center gap-2 shadow-2xl transition-all duration-300 ${tempBet > 0 || gameState.playerHands.length > 0 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'} bg-black/80 border-white/10 z-[60]`}>
-             <span className="text-[10px] font-black uppercase tracking-widest text-white/40">TOTAL BET</span>
-             <span className="text-lg font-black text-amber-400">
+             <span className="text-[10px] font-black uppercase tracking-widest text-white/40">BET</span>
+             <span className="text-base font-black text-amber-400">
                ${gameState.status === 'BETTING' ? tempBet : gameState.playerHands.reduce((acc, h) => acc + h.bet, 0)}
              </span>
           </div>
 
-          <div ref={potRef} className={`pot-zone w-full h-32 rounded-[40px] flex items-center justify-center transition-all relative mt-2 ${isPotPopping ? 'animate-pop' : ''}`}>
-            {/* Win Glow Effect */}
+          <div ref={potRef} className={`pot-zone w-full h-24 rounded-[30px] flex items-center justify-center transition-all relative mt-1 ${isPotPopping ? 'animate-pop' : ''}`}>
             {isUserWinning && (
-              <div className="absolute inset-0 bg-green-500/20 rounded-[40px] win-glow blur-2xl" />
+              <div className="absolute inset-0 bg-green-500/20 rounded-[30px] win-glow blur-2xl" />
             )}
             
             {chipsInPot.map((chip, idx) => (
@@ -502,7 +498,7 @@ const App: React.FC = () => {
                 key={chip.id}
                 value={chip.value}
                 denom={chip.denom}
-                sizeClass="w-14 h-14"
+                sizeClass="w-12 h-12"
                 className={`absolute ${isUserWinning ? 'animate-win-bounce' : 'animate-land'}`}
                 style={{ 
                   zIndex: idx,
@@ -517,24 +513,15 @@ const App: React.FC = () => {
         </div>
 
         {gameState.status === 'BETTING' && (
-          <div className="flex flex-col gap-2 mt-1">
+          <div className="flex flex-col gap-2">
              <div className="flex justify-center gap-4">
-                <button 
-                  onClick={(e) => addChip(10, 10, e)} 
-                  className="transition-transform outline-none"
-                >
+                <button onClick={(e) => addChip(10, 10, e)} className="outline-none">
                   <CasinoChip value={10} denom={10} className={activePulseDenom === 10 ? 'chip-active-pulse' : ''} />
                 </button>
-                <button 
-                  onClick={(e) => addChip(50, 50, e)} 
-                  className="transition-transform outline-none"
-                >
+                <button onClick={(e) => addChip(50, 50, e)} className="outline-none">
                   <CasinoChip value={50} denom={50} className={activePulseDenom === 50 ? 'chip-active-pulse' : ''} />
                 </button>
-                <button 
-                  onClick={(e) => addChip(100, 100, e)} 
-                  className="transition-transform outline-none"
-                >
+                <button onClick={(e) => addChip(100, 100, e)} className="outline-none">
                   <CasinoChip value={100} denom={100} className={activePulseDenom === 100 ? 'chip-active-pulse' : ''} />
                 </button>
              </div>
@@ -546,15 +533,35 @@ const App: React.FC = () => {
 
         {gameState.status === 'PLAYING' && (
           <div className="flex flex-col gap-2 mt-2">
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={hit} className="bg-white text-black py-4 rounded-[18px] text-lg font-black uppercase shadow-xl active:scale-[0.96] border-b-4 border-gray-300">HIT</button>
-              <button onClick={stand} className="bg-red-600 text-white py-4 rounded-[18px] text-lg font-black uppercase shadow-xl active:scale-[0.96] border-b-4 border-red-800">STAND</button>
+            <div className={`grid ${actionGridCols} gap-3`}>
+              <button 
+                onClick={hit} 
+                className="bg-white text-black py-4 rounded-[18px] text-lg font-black uppercase shadow-xl active:scale-[0.96] border-b-6 border-gray-300"
+              >
+                HIT
+              </button>
+              <button 
+                onClick={stand} 
+                className="bg-red-600 text-white py-4 rounded-[18px] text-lg font-black uppercase shadow-xl active:scale-[0.96] border-b-6 border-red-800"
+              >
+                STAND
+              </button>
               
               {canDouble && (
-                <button onClick={doubleDown} className="col-span-1 bg-amber-500 text-black py-4 rounded-[18px] text-lg font-black uppercase shadow-xl active:scale-[0.96] border-b-4 border-amber-700">DOUBLE</button>
+                <button 
+                  onClick={doubleDown} 
+                  className="bg-amber-500 text-black py-4 rounded-[18px] text-lg font-black uppercase shadow-xl active:scale-[0.96] border-b-6 border-amber-700"
+                >
+                  DOUBLE
+                </button>
               )}
               {canSplit && (
-                <button onClick={split} className={`${canDouble ? 'col-span-1' : 'col-span-2'} bg-blue-500 text-white py-4 rounded-[18px] text-lg font-black uppercase shadow-xl active:scale-[0.96] border-b-4 border-blue-700`}>SPLIT</button>
+                <button 
+                  onClick={split} 
+                  className={`bg-blue-500 text-white py-4 rounded-[18px] text-lg font-black uppercase shadow-xl active:scale-[0.96] border-b-6 border-blue-700 ${actionButtonCount === 3 ? 'col-span-3' : 'col-span-1'}`}
+                >
+                  SPLIT
+                </button>
               )}
             </div>
           </div>

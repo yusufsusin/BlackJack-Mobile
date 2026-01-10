@@ -10,11 +10,16 @@ interface CardProps {
 export const Card: React.FC<CardProps> = ({ card, index }) => {
   const isRed = card.suit === '♥' || card.suit === '♦';
 
+  const commonStyles: React.CSSProperties = {
+    zIndex: index,
+    animationDelay: `${index * 0.1}s`,
+  };
+
   if (card.isHidden) {
     return (
       <div 
         className="animate-deal card-animation relative w-14 h-20 md:w-20 md:h-28 bg-blue-700 rounded-lg border-2 border-white flex items-center justify-center shadow-xl overflow-hidden"
-        style={{ zIndex: index }}
+        style={commonStyles}
       >
         <div className="absolute inset-1 border border-white/20 rounded-md bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-600 to-blue-800 flex items-center justify-center">
             <div className="w-8 h-8 border-2 border-white/10 rounded-full flex items-center justify-center text-white/20 font-bold"></div>
@@ -26,7 +31,7 @@ export const Card: React.FC<CardProps> = ({ card, index }) => {
   return (
     <div 
       className={`animate-deal card-animation relative w-14 h-20 md:w-20 md:h-28 bg-white rounded-lg flex flex-col p-1.5 shadow-2xl transition-all hover:-translate-y-1`}
-      style={{ zIndex: index }}
+      style={commonStyles}
     >
       <div className={`text-base md:text-xl font-bold leading-none ${isRed ? 'text-red-600' : 'text-black'}`}>
         {card.rank}

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { CardType, PlayerHand } from '../types';
 import { Card } from './Card';
@@ -33,13 +34,13 @@ export const Hand: React.FC<HandProps> = ({ cards, showValue = true, position, i
 
   return (
     <div className={`flex flex-col items-center w-full transition-opacity duration-500 ${cards.length === 0 ? 'opacity-0' : 'opacity-100'}`}>
-      <div className={`relative flex justify-center w-full h-[120px] md:h-[160px] rounded-xl transition-all duration-700 ${isWinner ? 'hand-win-glow scale-105' : ''}`}>
+      <div className={`relative flex justify-center w-full h-[100px] md:h-[130px] rounded-xl transition-all duration-700 ${isWinner ? 'hand-win-glow scale-105' : ''}`}>
         <div className={`absolute inset-0 mx-auto w-32 h-32 md:w-48 md:h-48 rounded-full blur-[60px] opacity-10 pointer-events-none ${position === 'top' ? 'bg-red-500 -top-10' : 'bg-blue-500 -bottom-10'}`} />
         
         {showValue && cards.length > 0 && (
           <div 
             className={`absolute left-1/2 -translate-x-1/2 z-[50] transition-all duration-300 flex flex-col items-center gap-1 ${
-              position === 'top' ? '-top-8' : '-bottom-6'
+              position === 'top' ? 'top-[90px] md:top-[120px]' : '-top-7 md:-top-10'
             }`}
           >
             {hand?.isDoubled && (
@@ -47,7 +48,7 @@ export const Hand: React.FC<HandProps> = ({ cards, showValue = true, position, i
             )}
             <div className={`
               ${position === 'top' ? 'ios-glass text-white/90 border-white/10' : 'bg-amber-500 text-black border-amber-300'} 
-              px-3 py-1 rounded-full text-xs font-black shadow-2xl border flex items-center justify-center min-w-[32px]
+              px-3 py-0.5 rounded-full text-[10px] md:text-xs font-black shadow-2xl border flex items-center justify-center min-w-[32px]
             `}>
               {displayValue()}
             </div>
