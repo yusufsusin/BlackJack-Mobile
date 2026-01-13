@@ -1,5 +1,6 @@
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
+import { StyleSheet, View, Text, Dimensions, Animated, Easing } from 'react-native';
 import { CardType } from '../types';
 
 interface CardProps {
@@ -7,49 +8,147 @@ interface CardProps {
   index: number;
 }
 
+const { width } = Dimensions.get('window');
+const isSmallDevice = width < 380;
+
+const CARD_WIDTH = isSmallDevice ? 56 : 72;
+const CARD_HEIGHT = isSmallDevice ? 80 : 100;
+
 export const Card: React.FC<CardProps> = ({ card, index }) => {
   const isRed = card.suit === '♥' || card.suit === '♦';
+  const dealAnim = useRef(new Animated.Value(0)).current;
 
-  const commonStyles: React.CSSProperties = {
-    zIndex: index,
-    animationDelay: `${index * 0.1}s`,
-  };
+  useEffect(() => {
+    Animated.timing(dealAnim, {
+      toValue: 1,
+      duration: 300,
+      delay: index * 100,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start();
+  }, [index]);
+
+  const animatedStyle = {
+    opacity: dealAnim,
+    transform: [
+      { translateY: dealAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) },
+      { scale: dealAnim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }) }
+    ]
+  } as any;
 
   if (card.isHidden) {
     return (
-      <div 
-        className="animate-deal card-animation relative w-14 h-20 md:w-20 md:h-28 bg-blue-700 rounded-lg border-2 border-white flex items-center justify-center shadow-xl overflow-hidden"
-        style={commonStyles}
-      >
-        <div className="absolute inset-1 border border-white/20 rounded-md bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-600 to-blue-800 flex items-center justify-center">
-            <div className="w-8 h-8 border-2 border-white/10 rounded-full flex items-center justify-center text-white/20 font-bold"></div>
-        </div>
-      </div>
+      <Animated.View style={[styles.card, styles.cardHidden, animatedStyle]}>
+        <View style={styles.cardHiddenInner}>
+          <View style={styles.appleLogoContainer}>
+            <Text style={styles.appleLogo}></Text>
+          </View>
+        </View>
+      </Animated.View>
     );
   }
 
   return (
-    <div 
-      className={`animate-deal card-animation relative w-14 h-20 md:w-20 md:h-28 bg-white rounded-lg flex flex-col p-1.5 shadow-2xl transition-all hover:-translate-y-1`}
-      style={commonStyles}
-    >
-      <div className={`text-base md:text-xl font-bold leading-none ${isRed ? 'text-red-600' : 'text-black'}`}>
-        {card.rank}
-      </div>
-      <div className={`text-xs md:text-lg ${isRed ? 'text-red-600' : 'text-black'}`}>
-        {card.suit}
-      </div>
-      <div className="absolute bottom-1.5 right-1.5 rotate-180 flex flex-col items-end">
-        <div className={`text-base md:text-xl font-bold leading-none ${isRed ? 'text-red-600' : 'text-black'}`}>
-          {card.rank}
-        </div>
-        <div className={`text-xs md:text-lg ${isRed ? 'text-red-600' : 'text-black'}`}>
-          {card.suit}
-        </div>
-      </div>
-      <div className={`absolute inset-0 flex items-center justify-center text-2xl md:text-4xl opacity-10 pointer-events-none ${isRed ? 'text-red-600' : 'text-black'}`}>
-        {card.suit}
-      </div>
-    </div>
+    <Animated.View style={[styles.card, animatedStyle]}>
+      <View style={styles.cardInfo}>
+        <Text style={[styles.cardRank, isRed && styles.textRed]}>{card.rank}</Text>
+        <Text style={[styles.cardSuitSmall, isRed && styles.textRed]}>{card.suit}</Text>
+      </View>
+
+      <View style={styles.centerSuitContainer}>
+        <Text style={[styles.centerSuit, isRed && styles.textRed]}>{card.suit}</Text>
+      </View>
+
+      <View style={styles.cardInfoBottom}>
+        <Text style={[styles.cardRank, isRed && styles.textRed]}>{card.rank}</Text>
+        <Text style={[styles.cardSuitSmall, isRed && styles.textRed]}>{card.suit}</Text>
+      </View>
+    </Animated.View>
   );
 };
+
+const styles = StyleSheet.create({
+  card: {
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  cardHidden: {
+    backgroundColor: '#1d4ed8', // blue-700
+    borderWidth: 2,
+    borderColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cardHiddenInner: {
+    padding: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 6,
+    width: '90%',
+    height: '90%',
+    backgroundColor: '#2563eb', // blue-600
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  appleLogoContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  appleLogo: {
+    color: 'rgba(255,255,255,0.2)',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  cardInfo: {
+    alignItems: 'flex-start',
+  },
+  cardInfoBottom: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    transform: [{ rotate: '180deg' }],
+    alignItems: 'flex-start',
+  },
+  cardRank: {
+    fontSize: 16,
+    fontWeight: '900',
+    lineHeight: 16,
+    color: 'black',
+  },
+  cardSuitSmall: {
+    fontSize: 10,
+    color: 'black',
+  },
+  centerSuitContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    opacity: 0.1,
+  },
+  centerSuit: {
+    fontSize: 32,
+    color: 'black',
+  },
+  textRed: {
+    color: '#c62828',
+  }
+});

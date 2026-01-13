@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { StyleSheet, View, Text, Dimensions } from 'react-native';
 import { CardType, PlayerHand } from '../types';
 import { Card } from './Card';
 import { calculateHandValue, getBestValue } from '../utils/gameLogic';
@@ -12,14 +13,19 @@ interface HandProps {
   hand?: PlayerHand;
 }
 
+const { width } = Dimensions.get('window');
+const isSmallDevice = width < 380;
+const CARD_WIDTH = isSmallDevice ? 56 : 72;
+const CARD_OVERLAP = isSmallDevice ? 20 : 25;
+
 export const Hand: React.FC<HandProps> = ({ cards, showValue = true, position, isFinished = false, hand }) => {
   const { total1, total2 } = calculateHandValue(cards);
-  
+
   const displayValue = () => {
     if (cards.some(c => c.isHidden)) {
       return `${getBestValue(total1, total2)}`;
     }
-    
+
     if (isFinished) {
       return `${getBestValue(total1, total2)}`;
     }
@@ -29,47 +35,132 @@ export const Hand: React.FC<HandProps> = ({ cards, showValue = true, position, i
     return `${total1}/${total2}`;
   };
 
-  const handWidth = cards.length > 0 ? (cards.length - 1) * 24 + (56) : 0;
+  const handWidth = cards.length > 0 ? (cards.length - 1) * CARD_OVERLAP + CARD_WIDTH : 0;
   const isWinner = hand?.result === 'WIN' || hand?.result === 'BLACKJACK';
 
   return (
-    <div className={`flex flex-col items-center w-full transition-opacity duration-500 ${cards.length === 0 ? 'opacity-0' : 'opacity-100'}`}>
-      <div className={`relative flex justify-center w-full h-[100px] md:h-[130px] rounded-xl transition-all duration-700 ${isWinner ? 'hand-win-glow scale-105' : ''}`}>
-        <div className={`absolute inset-0 mx-auto w-32 h-32 md:w-48 md:h-48 rounded-full blur-[60px] opacity-10 pointer-events-none ${position === 'top' ? 'bg-red-500 -top-10' : 'bg-blue-500 -bottom-10'}`} />
-        
+    <View style={[styles.container, cards.length === 0 && styles.hidden]}>
+      <View style={[styles.relativeContainer, isWinner && styles.handWinGlow]}>
         {showValue && cards.length > 0 && (
-          <div 
-            className={`absolute left-1/2 -translate-x-1/2 z-[50] transition-all duration-300 flex flex-col items-center gap-1 ${
-              position === 'top' ? 'top-[90px] md:top-[120px]' : '-top-7 md:-top-10'
-            }`}
+          <View
+            style={[
+              styles.valueBadgeContainer,
+              position === 'top' ? styles.valueTop : styles.valueBottom
+            ]}
           >
             {hand?.isDoubled && (
-              <span className="bg-amber-500 text-[8px] font-black text-black px-1.5 rounded-sm uppercase tracking-tighter">Double</span>
+              <View style={styles.doubleBadge}>
+                <Text style={styles.doubleBadgeText}>DOUBLE</Text>
+              </View>
             )}
-            <div className={`
-              ${position === 'top' ? 'ios-glass text-white/90 border-white/10' : 'bg-amber-500 text-black border-amber-300'} 
-              px-3 py-0.5 rounded-full text-[10px] md:text-xs font-black shadow-2xl border flex items-center justify-center min-w-[32px]
-            `}>
-              {displayValue()}
-            </div>
-          </div>
+            <View style={[
+              styles.valueBadge,
+              position === 'top' ? styles.valueBadgeTop : styles.valueBadgeBottom
+            ]}>
+              <Text style={[
+                styles.valueText,
+                position === 'top' ? styles.valueTextTop : styles.valueTextBottom
+              ]}>
+                {displayValue()}
+              </Text>
+            </View>
+          </View>
         )}
 
-        <div className="relative" style={{ width: `${handWidth}px` }}>
+        <View style={{ width: handWidth, height: isSmallDevice ? 80 : 100 }}>
           {cards.map((card, idx) => (
-            <div 
-              key={`${idx}-${card.rank}-${card.suit}`} 
-              className="absolute top-0 left-0" 
-              style={{ 
-                transform: `translateX(${idx * 24}px)`,
-                zIndex: idx 
-              }}
+            <View
+              key={`${idx}-${card.rank}-${card.suit}`}
+              style={[
+                styles.cardWrapper,
+                { left: idx * CARD_OVERLAP, zIndex: idx }
+              ]}
             >
-               <Card card={card} index={idx} />
-            </div>
+              <Card card={card} index={idx} />
+            </View>
           ))}
-        </div>
-      </div>
-    </div>
+        </View>
+      </View>
+    </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  hidden: {
+    opacity: 0,
+  },
+  relativeContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+    paddingVertical: 10,
+  },
+  handWinGlow: {
+    backgroundColor: 'rgba(74, 222, 128, 0.1)',
+    borderRadius: 20,
+  },
+  valueBadgeContainer: {
+    position: 'absolute',
+    left: '50%',
+    transform: [{ translateX: -20 }],
+    zIndex: 50,
+    alignItems: 'center',
+    gap: 2,
+  },
+  valueTop: {
+    top: isSmallDevice ? 85 : 105,
+  },
+  valueBottom: {
+    top: -25,
+  },
+  doubleBadge: {
+    backgroundColor: '#f59e0b',
+    paddingHorizontal: 4,
+    borderRadius: 2,
+  },
+  doubleBadgeText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: 'black',
+  },
+  valueBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+    borderRadius: 12,
+    borderWidth: 1,
+    minWidth: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 5,
+  },
+  valueBadgeTop: {
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  valueBadgeBottom: {
+    backgroundColor: '#f59e0b',
+    borderColor: '#FCD34D',
+  },
+  valueText: {
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  valueTextTop: {
+    color: 'white',
+  },
+  valueTextBottom: {
+    color: 'black',
+  },
+  cardWrapper: {
+    position: 'absolute',
+    top: 0,
+  }
+});

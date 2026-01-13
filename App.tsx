@@ -1,9 +1,25 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  StyleSheet,
+  View,
+  Text,
+  TouchableOpacity,
+  SafeAreaView,
+  Dimensions,
+  Animated,
+  Platform,
+  StatusBar,
+  Easing
+} from 'react-native';
 import { GameStatus, CardType, GameState, PlayerHand } from './types';
-import { createDeck, calculateHandValue, getBestValue } from './utils/gameLogic';
+import { createDeck, calculateHandValue, getBestValue, isBlackjack } from './utils/gameLogic';
 import { Hand } from './components/Hand';
 import { INITIAL_MONEY, MIN_BET } from './constants';
+
+const { width, height } = Dimensions.get('window');
+
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 interface ChipInPot {
   id: number;
@@ -14,39 +30,45 @@ interface ChipInPot {
   rotation: number;
 }
 
-interface FlyingChip extends Omit<ChipInPot, 'rotation'> {
-  startX: number;
-  startY: number;
-  targetX: number;
-  targetY: number;
-  rotation: number;
-}
 
-const CasinoChip: React.FC<{ 
-  value: number; 
-  denom: 10 | 50 | 100; 
-  sizeClass?: string; 
-  className?: string; 
-  style?: React.CSSProperties;
-}> = ({ value, denom, sizeClass = "w-14 h-14 md:w-16 md:h-16", className = "", style }) => {
-  const chipClass = `chip-${denom}`;
-  
-  let textScaleClass = "text-lg md:text-2xl";
-  if (value >= 100) {
-    textScaleClass = "text-sm md:text-lg"; 
-  }
+const CasinoChip: React.FC<{
+  value: number;
+  denom: 10 | 50 | 100;
+  size?: number;
+  style?: any;
+}> = ({ value, denom, size = 60, style }) => {
+  const getChipColor = () => {
+    switch (denom) {
+      case 100: return '#1a1a1a'; // Black
+      case 50: return '#1e40af';  // Blue
+      case 10: return '#c62828';  // Casino Red
+      default: return '#1a1a1a';
+    }
+  };
 
   return (
-    <div className={`chip-base ${chipClass} ${sizeClass} ${className}`} style={style}>
-      <div className="chip-edge-spots"></div>
-      <div className="chip-inner-ring"></div>
-      <div className="chip-sheen"></div>
-      <div className="chip-inlay">
-        <span className={`${textScaleClass} font-black text-black leading-none drop-shadow-sm tracking-tighter`}>
-          ${value}
-        </span>
-      </div>
-    </div>
+    <View style={[styles.chipShadowWrapper, { width: size, height: size }, style]}>
+      <View style={[
+        styles.chipBase,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor: getChipColor()
+        }
+      ]}>
+        <View style={[styles.chipInnerRing, { borderRadius: (size - 8) / 2 }]} />
+        <View style={[styles.chipInlay, { borderRadius: (size - 16) / 2 }]}>
+          <Text
+            style={[styles.chipText, { fontSize: size * 0.28 }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+          >
+            ${value}
+          </Text>
+        </View>
+      </View>
+    </View>
   );
 };
 
@@ -63,10 +85,10 @@ const App: React.FC = () => {
 
   const [tempBet, setTempBet] = useState(0);
   const [chipsInPot, setChipsInPot] = useState<ChipInPot[]>([]);
-  const [flyingChips, setFlyingChips] = useState<FlyingChip[]>([]);
-  const [isPotPopping, setIsPotPopping] = useState(false);
+  const [flyingChips, setFlyingChips] = useState<{ id: number, value: number, denom: 10 | 50 | 100, anim: Animated.ValueXY }[]>([]);
   const [activePulseDenom, setActivePulseDenom] = useState<number | null>(null);
-  const potRef = useRef<HTMLDivElement>(null);
+
+  const potScale = useRef(new Animated.Value(1)).current;
 
   const startNewGame = useCallback(() => {
     if (tempBet < MIN_BET) {
@@ -91,22 +113,56 @@ const App: React.FC = () => {
       status: 'PLAYING'
     };
 
-    const { total1 } = calculateHandValue(initialPlayerHand.cards);
-    if (total1 === 21) {
-        initialPlayerHand.status = 'BLACKJACK';
-        initialPlayerHand.isFinished = true;
-    }
+    const isPlayerBJ = isBlackjack(initialPlayerHand.cards);
 
-    setGameState(prev => ({
-      ...prev,
-      money: prev.money - tempBet,
-      deck: newDeck,
-      playerHands: [initialPlayerHand],
-      activeHandIndex: 0,
-      dealerHand: [d1, d2],
-      status: initialPlayerHand.status === 'BLACKJACK' ? 'DEALER_TURN' : 'PLAYING',
-      message: initialPlayerHand.status === 'BLACKJACK' ? 'BLACKJACK!' : 'YOUR MOVE',
-    }));
+    if (isPlayerBJ) {
+      initialPlayerHand.status = 'BLACKJACK';
+      initialPlayerHand.isFinished = true;
+
+      const dealerUpCard = d1;
+      const isDealerPotentialBJ = dealerUpCard.rank === 'A' || dealerUpCard.value === 10;
+
+      if (!isDealerPotentialBJ) {
+        // Immediate win, no dealer draw needed
+        setGameState(prev => ({
+          ...prev,
+          money: prev.money - tempBet,
+          deck: newDeck,
+          playerHands: [initialPlayerHand],
+          activeHandIndex: 0,
+          dealerHand: [d1, { ...d2, isHidden: false }],
+          status: 'DEALER_TURN', // This will trigger result calculation but dealer won't draw because he has < 17 or maybe he already has his cards revealed
+          message: 'BLACKJACK! YOU WIN 3:2',
+        }));
+      } else {
+        // Dealer might have BJ, reveal and check
+        const d2Revealed = { ...d2, isHidden: false };
+        const isDealerBJ = isBlackjack([d1, d2Revealed]);
+
+        setGameState(prev => ({
+          ...prev,
+          money: prev.money - tempBet,
+          deck: newDeck,
+          playerHands: [initialPlayerHand],
+          activeHandIndex: 0,
+          dealerHand: [d1, d2Revealed],
+          status: 'DEALER_TURN',
+          message: isDealerBJ ? 'PUSH (BOTH BLACKJACK)' : 'BLACKJACK! YOU WIN 3:2',
+        }));
+      }
+    } else {
+      setGameState(prev => ({
+        ...prev,
+        money: prev.money - tempBet,
+        deck: newDeck,
+        playerHands: [initialPlayerHand],
+        activeHandIndex: 0,
+        dealerHand: [d1, d2],
+        status: 'PLAYING',
+        message: 'YOUR MOVE',
+        isDealerDone: false,
+      }));
+    }
   }, [tempBet, gameState.money]);
 
   const split = () => {
@@ -149,18 +205,7 @@ const App: React.FC = () => {
       }
     }
 
-    const id = Date.now();
-    const potRect = potRef.current?.getBoundingClientRect();
-    if (potRect) {
-        const offsetX = (Math.random() - 0.5) * 80;
-        const offsetY = (Math.random() - 0.5) * 40;
-        const rotation = (Math.random() - 0.5) * 60;
-        const denom = extraBet >= 100 ? 100 : (extraBet >= 50 ? 50 : 10);
-        setChipsInPot(prev => [...prev, { id, value: extraBet, denom: denom as any, offsetX, offsetY, rotation }]);
-    }
-
-    setIsPotPopping(true);
-    setTimeout(() => setIsPotPopping(false), 300);
+    addChipToPot(extraBet, extraBet >= 100 ? 100 : (extraBet >= 50 ? 50 : 10), true);
 
     const nextHands = [hand1, hand2];
     let nextActiveIndex = 0;
@@ -189,7 +234,7 @@ const App: React.FC = () => {
       activeHandIndex: nextActiveIndex,
       status: nextStatus,
       dealerHand: nextDealerHand,
-      message: isAces ? 'ACES SPLIT - ONE CARD EACH' : (hand1.isFinished ? 'HAND 1 COMPLETED' : 'HAND 1 ACTIVE'),
+      message: isAces ? 'ACES SPLIT' : (hand1.isFinished ? 'HAND 1 DONE' : 'HAND 1 ACTIVE'),
     }));
   };
 
@@ -198,7 +243,7 @@ const App: React.FC = () => {
     const newCard = newDeck.pop()!;
     const newHands = [...gameState.playerHands];
     const currentHand = { ...newHands[gameState.activeHandIndex] };
-    
+
     currentHand.cards = [...currentHand.cards, newCard];
     const { total2 } = calculateHandValue(currentHand.cards);
 
@@ -219,9 +264,9 @@ const App: React.FC = () => {
   const doubleDown = () => {
     const currentHand = gameState.playerHands[gameState.activeHandIndex];
     const extraBet = currentHand.bet;
-    
+
     if (gameState.money < extraBet) {
-      setGameState(prev => ({ ...prev, message: "NOT ENOUGH CASH TO DOUBLE" }));
+      setGameState(prev => ({ ...prev, message: "NOT ENOUGH CASH" }));
       return;
     }
 
@@ -229,33 +274,22 @@ const App: React.FC = () => {
     const newCard = newDeck.pop()!;
     const newHands = [...gameState.playerHands];
     const updatedHand = { ...currentHand };
-    
+
     updatedHand.cards = [...updatedHand.cards, newCard];
     updatedHand.bet = currentHand.bet * 2;
     updatedHand.isDoubled = true;
     updatedHand.isFinished = true;
-    
+
     const { total2 } = calculateHandValue(updatedHand.cards);
     updatedHand.status = total2 > 21 ? 'BUST' : 'STAND';
 
-    const id = Date.now();
-    const potRect = potRef.current?.getBoundingClientRect();
-    if (potRect) {
-        const offsetX = (Math.random() - 0.5) * 80;
-        const offsetY = (Math.random() - 0.5) * 40;
-        const rotation = (Math.random() - 0.5) * 60;
-        const denom = extraBet >= 100 ? 100 : (extraBet >= 50 ? 50 : 10);
-        setChipsInPot(prev => [...prev, { id, value: extraBet, denom: denom as any, offsetX, offsetY, rotation }]);
-    }
-
-    setIsPotPopping(true);
-    setTimeout(() => setIsPotPopping(false), 300);
+    addChipToPot(extraBet, extraBet >= 100 ? 100 : (extraBet >= 50 ? 50 : 10), true);
 
     setGameState(prev => ({
       ...prev,
       money: prev.money - extraBet,
       deck: newDeck,
-      message: updatedHand.status === 'BUST' ? 'BUSTED ON DOUBLE!' : 'DOUBLED DOWN'
+      message: updatedHand.status === 'BUST' ? 'BUSTED!' : 'DOUBLED'
     }));
 
     moveToNextHand(newHands, updatedHand, newDeck);
@@ -282,39 +316,66 @@ const App: React.FC = () => {
         message: `HAND ${nextIndex + 1} ACTIVE`
       }));
     } else {
-      setGameState(prev => ({
-        ...prev,
-        playerHands: hands,
-        status: 'DEALER_TURN',
-        deck: deck,
-        dealerHand: prev.dealerHand.map(c => ({ ...c, isHidden: false }))
-      }));
+      const allBusted = hands.every(h => h.status === 'BUST');
+
+      if (allBusted) {
+        // Instant failure - no dealer turn
+        const finalHands = hands.map(h => ({ ...h, result: 'LOSS' as const }));
+        setGameState(prev => ({
+          ...prev,
+          playerHands: finalHands,
+          status: 'GAME_OVER',
+          deck: deck,
+          dealerHand: prev.dealerHand.map(c => ({ ...c, isHidden: false })),
+          isDealerDone: true,
+          message: "BUST! YOU LOSE"
+        }));
+      } else {
+        setGameState(prev => ({
+          ...prev,
+          playerHands: hands,
+          status: 'DEALER_TURN',
+          deck: deck,
+          dealerHand: prev.dealerHand.map(c => ({ ...c, isHidden: false })),
+          message: "DEALER'S TURN",
+          isDealerDone: false
+        }));
+      }
     }
   };
 
   useEffect(() => {
     if (gameState.status === 'DEALER_TURN') {
       const runDealerTurn = async () => {
-        await new Promise(resolve => setTimeout(resolve, 1200));
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         let currentDealerHand: CardType[] = [...gameState.dealerHand].map(c => ({ ...c, isHidden: false }));
         let currentDeck = [...gameState.deck];
         let { total1: dt1, total2: dt2 } = calculateHandValue(currentDealerHand);
-        
-        while (dt1 < 17 || (dt1 > 21 && dt2 < 17)) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          const newCard = currentDeck.pop()!;
-          currentDealerHand.push(newCard);
-          const nextVal = calculateHandValue(currentDealerHand);
-          dt1 = nextVal.total1;
-          dt2 = nextVal.total2;
-          
-          setGameState(prev => ({
-            ...prev,
-            dealerHand: [...currentDealerHand],
-            deck: [...currentDeck]
-          }));
+
+        // If player has only one hand and it's a Blackjack, dealer doesn't draw
+        const isInitialBlackjack = gameState.playerHands.length === 1 && gameState.playerHands[0].status === 'BLACKJACK';
+
+        if (!isInitialBlackjack) {
+          while (dt1 < 17 || (dt1 > 21 && dt2 < 17)) {
+            await delay(1200); // 1.2s delay between cards
+            const newCard = currentDeck.pop()!;
+            currentDealerHand.push(newCard);
+            const nextVal = calculateHandValue(currentDealerHand);
+            dt1 = nextVal.total1;
+            dt2 = nextVal.total2;
+
+            setGameState(prev => ({
+              ...prev,
+              dealerHand: [...currentDealerHand],
+              deck: [...currentDeck],
+              message: "DEALER'S TURN..."
+            }));
+          }
         }
+
+        setGameState(prev => ({ ...prev, isDealerDone: true }));
+        await delay(1000); // Dramatic pause before results
 
         const dealerBest = getBestValue(dt1, dt2);
         let finalMoney = gameState.money;
@@ -324,27 +385,27 @@ const App: React.FC = () => {
           const { total1, total2 } = calculateHandValue(hand.cards);
           const playerBest = getBestValue(total1, total2);
           const prefix = gameState.playerHands.length > 1 ? `H${idx + 1}: ` : '';
-          
+
           const updatedHand = { ...hand };
 
           if (playerBest > 21) {
-            messages.push(`${prefix}BUSTED`);
+            messages.push(`${prefix}BUST`);
             updatedHand.result = 'LOSS';
             return updatedHand;
           }
-          
+
           if (dealerBest > 21 || playerBest > dealerBest) {
             const isBlackjack = hand.status === 'BLACKJACK';
             const winAmount = isBlackjack ? hand.bet * 2.5 : hand.bet * 2;
             finalMoney += winAmount;
-            messages.push(isBlackjack ? `${prefix}BLACKJACK!` : `${prefix}YOU WIN`);
+            messages.push(isBlackjack ? `${prefix}BJ!` : `${prefix}WIN`);
             updatedHand.result = isBlackjack ? 'BLACKJACK' : 'WIN';
           } else if (playerBest === dealerBest) {
             finalMoney += hand.bet;
             messages.push(`${prefix}PUSH`);
             updatedHand.result = 'PUSH';
           } else {
-            messages.push(`${prefix}YOU LOST`);
+            messages.push(`${prefix}LOSS`);
             updatedHand.result = 'LOSS';
           }
           return updatedHand;
@@ -370,209 +431,486 @@ const App: React.FC = () => {
       message: '',
       playerHands: [],
       dealerHand: [],
-      activeHandIndex: 0
+      activeHandIndex: 0,
+      isDealerDone: false
     }));
     setTempBet(0);
     setChipsInPot([]);
   };
 
-  const addChip = (value: number, denom: 10 | 50 | 100, e: React.MouseEvent<HTMLButtonElement>) => {
-    if (gameState.money < tempBet + value) return;
-    
-    setActivePulseDenom(denom);
-    setTimeout(() => setActivePulseDenom(null), 400);
+  const removeChipFromPot = (chipId: number) => {
+    if (gameState.status !== 'BETTING') return;
 
+    setChipsInPot(prev => {
+      const chipToRemove = prev.find(c => c.id === chipId);
+      if (!chipToRemove) return prev;
+
+      const newChips = prev.filter(c => c.id !== chipId);
+      setTempBet(v => v - chipToRemove.value);
+      setGameState(state => ({ ...state, money: state.money + chipToRemove.value }));
+
+      // Recalculate positions for remaining chips to maintain neat stacks
+      const counts: Record<number, number> = { 10: 0, 50: 0, 100: 0 };
+      return newChips.map(c => {
+        let offsetX = 0;
+        if (c.denom === 10) offsetX = -55;
+        else if (c.denom === 50) offsetX = 0;
+        else if (c.denom === 100) offsetX = 55;
+        const offsetY = -counts[c.denom] * 4;
+        counts[c.denom]++;
+        return { ...c, offsetX, offsetY, rotation: 0 };
+      });
+    });
+  };
+
+  const addChipToPot = (value: number, denom: 10 | 50 | 100, silent = false) => {
     const id = Date.now();
-    const rect = e.currentTarget.getBoundingClientRect();
-    const potRect = potRef.current?.getBoundingClientRect();
 
-    if (potRect) {
-      const offsetX = (Math.random() - 0.5) * 80;
-      const offsetY = (Math.random() - 0.5) * 40;
-      const rotation = (Math.random() - 0.5) * 60;
-      const targetX = (potRect.left + potRect.width / 2 - rect.width / 2) + offsetX;
-      const targetY = (potRect.top + potRect.height / 2 - rect.height / 2) + offsetY;
-      
-      const newChip: FlyingChip = { id, value, denom, startX: rect.left, startY: rect.top, targetX: targetX - rect.left, targetY: targetY - rect.top, offsetX, offsetY, rotation };
-      setFlyingChips(prev => [...prev, newChip]);
-      setTimeout(() => {
-        setChipsInPot(prev => [...prev, { id, value, denom, offsetX, offsetY, rotation }]);
-        setFlyingChips(prev => prev.filter(c => c.id !== id));
-        setTempBet(v => v + value);
-        setIsPotPopping(true);
-        setTimeout(() => setIsPotPopping(false), 300);
-      }, 500);
-    }
+    // Calculate final position based on how many chips of this denom are already in pot + flying
+    const inPot = chipsInPot.filter(c => c.denom === denom).length;
+    const flying = flyingChips.filter(c => c.denom === denom).length;
+    const currentCount = inPot + flying;
+    let offsetX = 0;
+    if (denom === 10) offsetX = -55;
+    else if (denom === 50) offsetX = 0;
+    else if (denom === 100) offsetX = 55;
+    const offsetY = -currentCount * 4;
+    const rotation = 0;
+
+    // Start from middle of chips row area roughly
+    const anim = new Animated.ValueXY({ x: 0, y: 150 });
+
+    setFlyingChips(prev => [...prev, { id, value, denom, anim }]);
+
+    Animated.sequence([
+      Animated.timing(anim, {
+        toValue: { x: offsetX, y: offsetY },
+        duration: 400,
+        easing: Easing.out(Easing.back(1.5)),
+        useNativeDriver: true,
+      }),
+      Animated.timing(potScale, {
+        toValue: 1.1,
+        duration: 50,
+        useNativeDriver: true
+      }),
+      Animated.timing(potScale, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true
+      })
+    ]).start(() => {
+      setChipsInPot(prev => [...prev, { id, value, denom, offsetX, offsetY, rotation }]);
+      setFlyingChips(prev => prev.filter(c => c.id !== id));
+      if (!silent) setTempBet(v => v + value);
+    });
+  };
+
+  const handleChipPress = (value: number, denom: 10 | 50 | 100) => {
+    if (gameState.money < tempBet + value) return;
+    setActivePulseDenom(denom);
+    setTimeout(() => setActivePulseDenom(null), 300);
+    addChipToPot(value, denom);
   };
 
   const currentActiveHand = gameState.playerHands[gameState.activeHandIndex];
 
-  const canSplit = gameState.status === 'PLAYING' && 
-                   gameState.playerHands.length === 1 && 
-                   currentActiveHand?.cards.length === 2 && 
-                   currentActiveHand.cards[0].rank === currentActiveHand.cards[1].rank &&
-                   gameState.money >= currentActiveHand.bet;
+  const canSplit = gameState.status === 'PLAYING' &&
+    gameState.playerHands.length === 1 &&
+    currentActiveHand?.cards.length === 2 &&
+    currentActiveHand.cards[0].rank === currentActiveHand.cards[1].rank &&
+    gameState.money >= currentActiveHand.bet;
 
-  const canDouble = gameState.status === 'PLAYING' && 
-                    currentActiveHand?.cards.length === 2 &&
-                    gameState.money >= currentActiveHand.bet;
+  const canDouble = gameState.status === 'PLAYING' &&
+    currentActiveHand?.cards.length === 2 &&
+    gameState.money >= currentActiveHand.bet;
 
-  const isUserWinning = gameState.status === 'GAME_OVER' && (gameState.message.includes('WIN') || gameState.message.includes('BLACKJACK'));
-
-  const actionButtonCount = 2 + (canDouble ? 1 : 0) + (canSplit ? 1 : 0);
-  const actionGridCols = actionButtonCount === 3 ? 'grid-cols-3' : 'grid-cols-2';
+  const isUserWinning = gameState.status === 'GAME_OVER' && (gameState.message.includes('WIN') || gameState.message.includes('BJ!'));
 
   return (
-    <div className="flex flex-col h-screen felt-bg p-4 select-none overflow-hidden relative">
-      {flyingChips.map(chip => (
-        <CasinoChip
-          key={chip.id}
-          value={chip.value}
-          denom={chip.denom}
-          className="fixed z-[100] animate-fly pointer-events-none"
-          style={{ 
-            left: chip.startX, 
-            top: chip.startY, 
-            '--tw-translate-x': `${chip.targetX}px`, 
-            '--tw-translate-y': `${chip.targetY}px` 
-          } as React.CSSProperties}
-        />
-      ))}
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" />
 
-      <div className="flex justify-between items-center px-4 py-2 ios-glass rounded-2xl shadow-xl mt-safe border border-white/5">
-        <div className="flex flex-col">
-          <span className="text-[9px] text-white/40 font-black uppercase tracking-widest">Bankroll</span>
-          <span className="text-lg font-black text-green-400 leading-none">${gameState.money}</span>
-        </div>
-        <div className="flex flex-col items-end">
-          <span className="text-[8px] text-white/40 font-black uppercase tracking-widest italic leading-none">Blackjack 3:2</span>
-          <span className="text-[10px] font-black text-white/20 uppercase tracking-tighter">S17 Stand</span>
-        </div>
-      </div>
+      {/* Header */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.bankrollLabel}>BANKROLL</Text>
+          <Text style={styles.bankrollValue}>${gameState.money}</Text>
+        </View>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={styles.rulesText}>Blackjack 3:2</Text>
+          <Text style={styles.rulesTextSub}>Dealer stands on 17</Text>
+        </View>
+      </View>
 
-      <div className="flex-1 flex flex-col justify-around py-1 relative min-h-0 overflow-y-auto">
-        <div className="w-full flex justify-center pt-6">
-          <Hand 
-            position="top" 
-            cards={gameState.dealerHand} 
-            isFinished={gameState.status === 'GAME_OVER'} 
+      <View style={styles.table}>
+        {/* Dealer Hand */}
+        <View style={styles.dealerArea}>
+          <Hand
+            position="top"
+            cards={gameState.dealerHand}
+            isFinished={gameState.isDealerDone || gameState.status === 'GAME_OVER'}
           />
-        </div>
+        </View>
 
-        <div className="text-center px-4 h-6 flex items-center justify-center my-1">
-           <h2 className={`text-base md:text-lg font-black tracking-tighter uppercase italic drop-shadow-lg transition-all duration-500 ${isUserWinning ? 'text-green-400 scale-105' : 'text-white/90'}`}>
-             {gameState.message}
-           </h2>
-        </div>
+        {/* Message Area */}
+        <View style={styles.messageArea}>
+          <Text style={[styles.messageText, isUserWinning && { color: '#4ade80' }]}>
+            {gameState.message}
+          </Text>
+        </View>
 
-        <div className={`w-full flex ${gameState.playerHands.length > 1 ? 'flex-row justify-around' : 'flex-col items-center'} transition-all duration-500`}>
+        {/* Player Hands */}
+        <View style={styles.playerArea}>
           {gameState.playerHands.map((hand, idx) => (
-            <div key={idx} className={`flex flex-col items-center transition-all duration-300 ${gameState.activeHandIndex === idx ? 'scale-100 opacity-100' : 'scale-90 opacity-40 grayscale'}`}>
-              <Hand 
-                position="bottom" 
-                cards={hand.cards} 
-                isFinished={hand.isFinished || gameState.status === 'GAME_OVER'} 
+            <View key={idx} style={[styles.handContainer, gameState.activeHandIndex !== idx && { opacity: 0.5 }]}>
+              <Hand
+                position="bottom"
+                cards={hand.cards}
+                isFinished={hand.isFinished || gameState.status === 'GAME_OVER'}
                 hand={hand}
               />
-            </div>
+            </View>
           ))}
-        </div>
-      </div>
+        </View>
+      </View>
 
-      <div className="pb-8 pt-1 px-1 flex flex-col gap-1">
-        <div className="relative flex flex-col items-center">
-          <div className={`backdrop-blur-xl px-4 py-1 rounded-full border flex items-center gap-2 shadow-2xl transition-all duration-300 ${tempBet > 0 || gameState.playerHands.length > 0 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'} bg-black/80 border-white/10 z-[60]`}>
-             <span className="text-[10px] font-black uppercase tracking-widest text-white/40">BET</span>
-             <span className="text-base font-black text-amber-400">
-               ${gameState.status === 'BETTING' ? tempBet : gameState.playerHands.reduce((acc, h) => acc + h.bet, 0)}
-             </span>
-          </div>
+      {/* Control Area */}
+      <View style={styles.controls}>
+        <View style={styles.betInfo}>
+          <View style={styles.betBadge}>
+            <Text style={styles.betLabel}>BET</Text>
+            <Text style={styles.betValue}>
+              ${gameState.status === 'BETTING' ? tempBet : gameState.playerHands.reduce((acc, h) => acc + h.bet, 0)}
+            </Text>
+          </View>
+        </View>
 
-          <div ref={potRef} className={`pot-zone w-full h-24 rounded-[30px] flex items-center justify-center transition-all relative mt-1 ${isPotPopping ? 'animate-pop' : ''}`}>
-            {isUserWinning && (
-              <div className="absolute inset-0 bg-green-500/20 rounded-[30px] win-glow blur-2xl" />
-            )}
-            
-            {chipsInPot.map((chip, idx) => (
+        <Animated.View style={[styles.potZone, { transform: [{ scale: potScale }] }]}>
+          {chipsInPot.map((chip, idx) => (
+            <TouchableOpacity
+              key={chip.id}
+              activeOpacity={0.8}
+              onPress={() => removeChipFromPot(chip.id)}
+              disabled={gameState.status !== 'BETTING'}
+              style={{
+                position: 'absolute',
+                transform: [
+                  { translateX: chip.offsetX },
+                  { translateY: chip.offsetY },
+                  { rotate: `${chip.rotation}deg` }
+                ],
+                zIndex: idx
+              }}
+            >
               <CasinoChip
-                key={chip.id}
                 value={chip.value}
                 denom={chip.denom}
-                sizeClass="w-12 h-12"
-                className={`absolute ${isUserWinning ? 'animate-win-bounce' : 'animate-land'}`}
-                style={{ 
-                  zIndex: idx,
-                  '--land-x': `${chip.offsetX}px`,
-                  '--land-y': `${chip.offsetY}px`,
-                  '--land-rot': `${chip.rotation}deg`
-                } as React.CSSProperties}
+                size={44}
               />
-            ))}
-            {chipsInPot.length === 0 && gameState.status === 'BETTING' && <span className="text-[10px] font-black text-white/5 uppercase tracking-[0.5em]">Bet Area</span>}
-          </div>
-        </div>
+            </TouchableOpacity>
+          ))}
+
+          {flyingChips.map(chip => (
+            <Animated.View
+              key={chip.id}
+              style={{
+                position: 'absolute',
+                transform: chip.anim.getTranslateTransform()
+              }}
+            >
+              <CasinoChip value={chip.value} denom={chip.denom} size={44} />
+            </Animated.View>
+          ))}
+
+          {chipsInPot.length === 0 && flyingChips.length === 0 && gameState.status === 'BETTING' && (
+            <Text style={styles.potPlaceholder}>PLACE YOUR BET</Text>
+          )}
+        </Animated.View>
 
         {gameState.status === 'BETTING' && (
-          <div className="flex flex-col gap-2">
-             <div className="flex justify-center gap-4">
-                <button onClick={(e) => addChip(10, 10, e)} className="outline-none">
-                  <CasinoChip value={10} denom={10} className={activePulseDenom === 10 ? 'chip-active-pulse' : ''} />
-                </button>
-                <button onClick={(e) => addChip(50, 50, e)} className="outline-none">
-                  <CasinoChip value={50} denom={50} className={activePulseDenom === 50 ? 'chip-active-pulse' : ''} />
-                </button>
-                <button onClick={(e) => addChip(100, 100, e)} className="outline-none">
-                  <CasinoChip value={100} denom={100} className={activePulseDenom === 100 ? 'chip-active-pulse' : ''} />
-                </button>
-             </div>
-             <button onClick={startNewGame} disabled={tempBet < MIN_BET} className={`w-full py-3.5 rounded-[18px] text-lg font-black uppercase tracking-tight shadow-xl transition-all border-t border-amber-200/30 ${tempBet >= MIN_BET ? 'bg-gradient-to-b from-amber-300 via-amber-500 to-amber-700 text-black active:scale-[0.96]' : 'bg-white/5 text-white/20 opacity-50 cursor-not-allowed'}`}>
-               {tempBet < MIN_BET ? `MIN BET $${MIN_BET}` : 'DEAL CARDS'}
-             </button>
-          </div>
+          <View style={styles.betControls}>
+            <View style={styles.chipsRow}>
+              <TouchableOpacity onPress={() => handleChipPress(10, 10)}>
+                <CasinoChip value={10} denom={10} size={54} style={activePulseDenom === 10 && styles.chipActive} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => handleChipPress(50, 50)}>
+                <CasinoChip value={50} denom={50} size={54} style={activePulseDenom === 50 && styles.chipActive} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => handleChipPress(100, 100)}>
+                <CasinoChip value={100} denom={100} size={54} style={activePulseDenom === 100 && styles.chipActive} />
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              onPress={startNewGame}
+              disabled={tempBet < MIN_BET}
+              style={[styles.dealButton, tempBet < MIN_BET && styles.dealButtonDisabled]}
+            >
+              <Text style={styles.dealButtonText}>
+                {tempBet < MIN_BET ? `MIN BET $${MIN_BET}` : 'DEAL'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {gameState.status === 'PLAYING' && (
-          <div className="flex flex-col gap-2 mt-2">
-            <div className={`grid ${actionGridCols} gap-3`}>
-              <button 
-                onClick={hit} 
-                className="bg-white text-black py-4 rounded-[18px] text-lg font-black uppercase shadow-xl active:scale-[0.96] border-b-6 border-gray-300"
-              >
-                HIT
-              </button>
-              <button 
-                onClick={stand} 
-                className="bg-red-600 text-white py-4 rounded-[18px] text-lg font-black uppercase shadow-xl active:scale-[0.96] border-b-6 border-red-800"
-              >
-                STAND
-              </button>
-              
+          <View style={styles.actionControls}>
+            <View style={styles.actionRow}>
+              <TouchableOpacity onPress={hit} style={[styles.actionButton, styles.hitButton]}>
+                <Text style={styles.actionButtonText}>HIT</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={stand} style={[styles.actionButton, styles.standButton]}>
+                <Text style={styles.actionButtonText}>STAND</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.actionRow}>
               {canDouble && (
-                <button 
-                  onClick={doubleDown} 
-                  className="bg-amber-500 text-black py-4 rounded-[18px] text-lg font-black uppercase shadow-xl active:scale-[0.96] border-b-6 border-amber-700"
-                >
-                  DOUBLE
-                </button>
+                <TouchableOpacity onPress={doubleDown} style={[styles.actionButton, styles.doubleButton]}>
+                  <Text style={styles.actionButtonText}>DOUBLE</Text>
+                </TouchableOpacity>
               )}
               {canSplit && (
-                <button 
-                  onClick={split} 
-                  className={`bg-blue-500 text-white py-4 rounded-[18px] text-lg font-black uppercase shadow-xl active:scale-[0.96] border-b-6 border-blue-700 ${actionButtonCount === 3 ? 'col-span-3' : 'col-span-1'}`}
-                >
-                  SPLIT
-                </button>
+                <TouchableOpacity onPress={split} style={[styles.actionButton, styles.splitButton]}>
+                  <Text style={styles.actionButtonText}>SPLIT</Text>
+                </TouchableOpacity>
               )}
-            </div>
-          </div>
+            </View>
+          </View>
         )}
 
         {gameState.status === 'GAME_OVER' && (
-          <button onClick={resetGame} className="w-full bg-gradient-to-b from-amber-300 to-amber-600 py-4 rounded-[18px] text-lg font-black text-black uppercase shadow-lg active:scale-[0.96] mt-2">NEXT HAND</button>
+          <TouchableOpacity onPress={resetGame} style={styles.nextHandButton}>
+            <Text style={styles.nextHandButtonText}>NEXT HAND</Text>
+          </TouchableOpacity>
         )}
-      </div>
-    </div>
+      </View>
+    </SafeAreaView>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#064e3b', // Deep felt green
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    marginHorizontal: 15,
+    borderRadius: 15,
+    marginTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+  bankrollLabel: {
+    fontSize: 9,
+    color: 'rgba(255,255,255,0.4)',
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  bankrollValue: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#FFD700', // Casino Gold
+  },
+  rulesText: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.4)',
+    fontWeight: '900',
+    fontStyle: 'italic',
+  },
+  rulesTextSub: {
+    fontSize: 8,
+    color: 'rgba(255,255,255,0.2)',
+    fontWeight: '900',
+  },
+  table: {
+    flex: 1,
+    justifyContent: 'space-between',
+    paddingVertical: 20,
+  },
+  dealerArea: {
+    alignItems: 'center',
+  },
+  messageArea: {
+    alignItems: 'center',
+    height: 40,
+    justifyContent: 'center',
+  },
+  messageText: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: 'white',
+    letterSpacing: -1,
+    textTransform: 'uppercase',
+  },
+  playerArea: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  handContainer: {
+    alignItems: 'center',
+  },
+  controls: {
+    paddingBottom: 20,
+    paddingHorizontal: 10,
+  },
+  betInfo: {
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  betBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    paddingHorizontal: 15,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  betLabel: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: 'rgba(255,255,255,0.4)',
+    marginRight: 8,
+  },
+  betValue: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#FFD700', // Casino Gold
+  },
+  potZone: {
+    height: 80,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 40,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+  },
+  potPlaceholder: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: 'rgba(255,255,255,0.1)',
+    letterSpacing: 2,
+  },
+  betControls: {
+    gap: 15,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 20,
+  },
+  dealButton: {
+    backgroundColor: '#f59e0b',
+    paddingVertical: 15,
+    borderRadius: 18,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
+  },
+  dealButtonDisabled: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    opacity: 0.5,
+  },
+  dealButtonText: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: 'black',
+  },
+  actionControls: {
+    gap: 10,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  actionButton: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 18,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
+  },
+  hitButton: {
+    backgroundColor: 'white',
+  },
+  standButton: {
+    backgroundColor: '#dc2626',
+  },
+  doubleButton: {
+    backgroundColor: '#f59e0b',
+  },
+  splitButton: {
+    backgroundColor: '#3b82f6',
+  },
+  actionButtonText: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: 'black',
+  },
+  nextHandButton: {
+    backgroundColor: '#f59e0b',
+    paddingVertical: 18,
+    borderRadius: 18,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  nextHandButtonText: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: 'black',
+  },
+  chipShadowWrapper: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 5,
+    elevation: 8,
+  },
+  chipBase: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.4)',
+    overflow: 'hidden',
+  },
+  chipInnerRing: {
+    position: 'absolute',
+    width: '85%',
+    height: '85%',
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  chipInlay: {
+    width: '72%',
+    height: '72%',
+    backgroundColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  chipText: {
+    fontWeight: '900',
+    color: 'black',
+  },
+  chipActive: {
+    transform: [{ scale: 1.15 }],
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 30,
+  }
+});
 
 export default App;

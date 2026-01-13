@@ -30,29 +30,34 @@ export const shuffle = (deck: CardType[]): CardType[] => {
 };
 
 export const calculateHandValue = (hand: CardType[]): { total1: number; total2: number } => {
-  let t1 = 0;
-  let t2 = 0;
-  let aces = 0;
+  let hardTotal = 0;
+  let hasAce = false;
 
   hand.forEach(card => {
     if (card.isHidden) return;
     if (card.rank === 'A') {
-      aces += 1;
-      t1 += 11;
-      t2 += 1;
+      hasAce = true;
+      hardTotal += 1;
     } else {
-      t1 += card.value;
-      t2 += card.value;
+      hardTotal += card.value;
     }
   });
 
-  // Re-evaluating totals like in the python logic
-  // If t1 > 21, it should effectively become t2. 
-  // However, the Python script shows dual totals when applicable (e.g., 18/8).
-  return { total1: t1, total2: t2 };
+  let softTotal = hardTotal;
+  if (hasAce && hardTotal + 10 <= 21) {
+    softTotal = hardTotal + 10;
+  }
+
+  return { total1: softTotal, total2: hardTotal };
 };
 
 export const getBestValue = (total1: number, total2: number): number => {
   if (total1 <= 21) return total1;
   return total2;
+};
+
+export const isBlackjack = (hand: CardType[]): boolean => {
+  if (hand.length !== 2) return false;
+  const { total1 } = calculateHandValue(hand);
+  return total1 === 21;
 };

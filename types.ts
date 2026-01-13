@@ -27,4 +27,5 @@ export interface GameState {
   deck: CardType[];
   status: GameStatus;
   message: string;
+  isDealerDone?: boolean;
 }
