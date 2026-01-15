@@ -24,26 +24,32 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 interface ChipInPot {
   id: number;
   value: number;
-  denom: 10 | 50 | 100;
+  denom: number;
   offsetX: number;
   offsetY: number;
   rotation: number;
 }
 
+const CHIP_CONFIG = [
+  { denom: 5, color: '#4caf50', minBalance: 0 },      // Green
+  { denom: 10, color: '#c62828', minBalance: 0 },     // Red
+  { denom: 50, color: '#1e40af', minBalance: 0 },     // Blue
+  { denom: 100, color: '#1a1a1a', minBalance: 0 },    // Black
+  { denom: 200, color: '#7b1fa2', minBalance: 3000 },  // Purple
+  { denom: 500, color: '#f57c00', minBalance: 6000 },  // Orange
+  { denom: 1000, color: '#ffd700', minBalance: 10000 }, // Gold/Yellow
+];
+
 
 const CasinoChip: React.FC<{
   value: number;
-  denom: 10 | 50 | 100;
+  denom: number;
   size?: number;
   style?: any;
 }> = ({ value, denom, size = 60, style }) => {
   const getChipColor = () => {
-    switch (denom) {
-      case 100: return '#1a1a1a'; // Black
-      case 50: return '#1e40af';  // Blue
-      case 10: return '#c62828';  // Casino Red
-      default: return '#1a1a1a';
-    }
+    const config = CHIP_CONFIG.find(c => c.denom === denom);
+    return config ? config.color : '#1a1a1a';
   };
 
   return (
@@ -85,7 +91,7 @@ const App: React.FC = () => {
 
   const [tempBet, setTempBet] = useState(0);
   const [chipsInPot, setChipsInPot] = useState<ChipInPot[]>([]);
-  const [flyingChips, setFlyingChips] = useState<{ id: number, value: number, denom: 10 | 50 | 100, anim: Animated.ValueXY }[]>([]);
+  const [flyingChips, setFlyingChips] = useState<{ id: number, value: number, denom: number, anim: Animated.ValueXY }[]>([]);
   const [activePulseDenom, setActivePulseDenom] = useState<number | null>(null);
 
   const potScale = useRef(new Animated.Value(1)).current;
@@ -95,12 +101,8 @@ const App: React.FC = () => {
       setGameState(prev => ({ ...prev, message: `MIN BET IS $${MIN_BET}` }));
       return;
     }
-    if (tempBet > gameState.money) {
-      setGameState(prev => ({ ...prev, message: "INSUFFICIENT FUNDS" }));
-      return;
-    }
-
     const newDeck = createDeck();
+
     const p1 = newDeck.pop()!;
     const d1 = newDeck.pop()!;
     const p2 = newDeck.pop()!;
@@ -126,12 +128,11 @@ const App: React.FC = () => {
         // Immediate win, no dealer draw needed
         setGameState(prev => ({
           ...prev,
-          money: prev.money - tempBet,
           deck: newDeck,
           playerHands: [initialPlayerHand],
           activeHandIndex: 0,
           dealerHand: [d1, { ...d2, isHidden: false }],
-          status: 'DEALER_TURN', // This will trigger result calculation but dealer won't draw because he has < 17 or maybe he already has his cards revealed
+          status: 'DEALER_TURN',
           message: 'BLACKJACK! YOU WIN 3:2',
         }));
       } else {
@@ -141,7 +142,6 @@ const App: React.FC = () => {
 
         setGameState(prev => ({
           ...prev,
-          money: prev.money - tempBet,
           deck: newDeck,
           playerHands: [initialPlayerHand],
           activeHandIndex: 0,
@@ -153,7 +153,6 @@ const App: React.FC = () => {
     } else {
       setGameState(prev => ({
         ...prev,
-        money: prev.money - tempBet,
         deck: newDeck,
         playerHands: [initialPlayerHand],
         activeHandIndex: 0,
@@ -226,6 +225,7 @@ const App: React.FC = () => {
       }
     }
 
+    setTempBet(v => v + extraBet);
     setGameState(prev => ({
       ...prev,
       money: prev.money - extraBet,
@@ -285,6 +285,7 @@ const App: React.FC = () => {
 
     addChipToPot(extraBet, extraBet >= 100 ? 100 : (extraBet >= 50 ? 50 : 10), true);
 
+    setTempBet(v => v + extraBet);
     setGameState(prev => ({
       ...prev,
       money: prev.money - extraBet,
@@ -424,62 +425,132 @@ const App: React.FC = () => {
     }
   }, [gameState.status]);
 
+  useEffect(() => {
+    // Sync UI when money changes significantly (e.g. at end of round)
+    if (gameState.status === 'GAME_OVER' || gameState.status === 'BETTING') {
+      refreshUI();
+    }
+  }, [gameState.money, gameState.status]);
+
+  const getUniquePotDenoms = useCallback(() => {
+    // Get unique denominations from both chips already in pot AND those currently flying
+    const denoms = new Set([
+      ...chipsInPot.map(c => c.denom),
+      ...flyingChips.map(c => c.denom)
+    ]);
+    return Array.from(denoms).sort((a, b) => a - b);
+  }, [chipsInPot, flyingChips]);
+
+  const getChipOffsetX = useCallback((denom: number, uniqueDenoms: number[]) => {
+    const localIdx = uniqueDenoms.indexOf(denom);
+    if (localIdx === -1) return 0;
+
+    const totalColumns = uniqueDenoms.length;
+    const spacing = 52; // Slightly more spacing for better visuals
+    // Dynamic centering: (index - midpoint) * spacing
+    return (localIdx - (totalColumns - 1) / 2) * spacing;
+  }, []);
+
+  const refreshUI = useCallback(() => {
+    const uniqueDenoms = getUniquePotDenoms();
+    setChipsInPot(prev => {
+      const counts: Record<number, number> = {};
+      return prev.map(c => {
+        const offsetX = getChipOffsetX(c.denom, uniqueDenoms);
+        const count = counts[c.denom] || 0;
+        const offsetY = -count * 4;
+        counts[c.denom] = count + 1;
+        return { ...c, offsetX, offsetY, rotation: 0 };
+      });
+    });
+  }, [getUniquePotDenoms, getChipOffsetX]);
+
   const resetGame = () => {
-    setGameState(prev => ({
-      ...prev,
-      status: 'BETTING',
-      message: '',
-      playerHands: [],
-      dealerHand: [],
-      activeHandIndex: 0,
-      isDealerDone: false
-    }));
+    setGameState(prev => {
+      const newState: GameState = {
+        ...prev,
+        money: prev.money + (prev.status === 'BETTING' ? tempBet : 0),
+        status: 'BETTING',
+        message: '',
+        playerHands: [],
+        dealerHand: [],
+        activeHandIndex: 0,
+        isDealerDone: false
+      };
+
+      // Check bankruptcy here when resetting for next hand
+      if (prev.money === 0 && tempBet === 0) {
+        newState.money = 1000;
+        newState.message = 'Bakiyeniz tükendi, 1000$ ikramiye tanımlandı';
+      }
+
+      return newState;
+    });
     setTempBet(0);
     setChipsInPot([]);
+    // refreshUI is implicitly called by setting chips to empty, but good to have
   };
+
 
   const removeChipFromPot = (chipId: number) => {
     if (gameState.status !== 'BETTING') return;
 
+    const chipToRemove = chipsInPot.find(c => c.id === chipId);
+    if (!chipToRemove) return;
+
+    // Fix: Move side effects out of the setChipsInPot updater to avoid double-firing 
+    // and ensure synchronous updates with current values.
+    const chipValue = chipToRemove.value;
+
+    setGameState(state => ({ ...state, money: state.money + chipValue }));
+    setTempBet(v => v - chipValue);
+
     setChipsInPot(prev => {
-      const chipToRemove = prev.find(c => c.id === chipId);
-      if (!chipToRemove) return prev;
-
       const newChips = prev.filter(c => c.id !== chipId);
-      setTempBet(v => v - chipToRemove.value);
-      setGameState(state => ({ ...state, money: state.money + chipToRemove.value }));
+      // Recalculate will be handled by refreshUI effect or manually here?
+      // Let's do it manually for immediate feedback
+      const denoms = new Set(newChips.map(c => c.denom));
+      const sortedDenoms = Array.from(denoms).sort((a, b) => a - b);
 
-      // Recalculate positions for remaining chips to maintain neat stacks
-      const counts: Record<number, number> = { 10: 0, 50: 0, 100: 0 };
+      const counts: Record<number, number> = {};
       return newChips.map(c => {
-        let offsetX = 0;
-        if (c.denom === 10) offsetX = -55;
-        else if (c.denom === 50) offsetX = 0;
-        else if (c.denom === 100) offsetX = 55;
-        const offsetY = -counts[c.denom] * 4;
-        counts[c.denom]++;
+        const offsetX = getChipOffsetX(c.denom, sortedDenoms);
+        const count = counts[c.denom] || 0;
+        const offsetY = -count * 4;
+        counts[c.denom] = count + 1;
         return { ...c, offsetX, offsetY, rotation: 0 };
       });
     });
   };
 
-  const addChipToPot = (value: number, denom: 10 | 50 | 100, silent = false) => {
+  const addChipToPot = (value: number, denom: number, silent = false) => {
     const id = Date.now();
 
-    // Calculate final position based on how many chips of this denom are already in pot + flying
+    // Calculate positions based on what WILL be in the pot (current + this new one)
+    const currentDenoms = new Set([...chipsInPot.map(c => c.denom), ...flyingChips.map(c => c.denom), denom]);
+    const sortedDenoms = Array.from(currentDenoms).sort((a, b) => a - b);
+
     const inPot = chipsInPot.filter(c => c.denom === denom).length;
     const flying = flyingChips.filter(c => c.denom === denom).length;
     const currentCount = inPot + flying;
-    let offsetX = 0;
-    if (denom === 10) offsetX = -55;
-    else if (denom === 50) offsetX = 0;
-    else if (denom === 100) offsetX = 55;
+
+    const offsetX = getChipOffsetX(denom, sortedDenoms);
     const offsetY = -currentCount * 4;
     const rotation = 0;
 
-    // Start from middle of chips row area roughly
-    const anim = new Animated.ValueXY({ x: 0, y: 150 });
+    // Shift ALL existing chips in the pot immediately to make room for the new set of columns
+    setChipsInPot(prev => {
+      const counts: Record<number, number> = {};
+      return prev.map(c => {
+        const offX = getChipOffsetX(c.denom, sortedDenoms);
+        const count = counts[c.denom] || 0;
+        const offY = -count * 4;
+        counts[c.denom] = count + 1;
+        return { ...c, offsetX: offX, offsetY: offY, rotation: 0 };
+      });
+    });
 
+    const anim = new Animated.ValueXY({ x: 0, y: 150 });
     setFlyingChips(prev => [...prev, { id, value, denom, anim }]);
 
     Animated.sequence([
@@ -506,11 +577,16 @@ const App: React.FC = () => {
     });
   };
 
-  const handleChipPress = (value: number, denom: 10 | 50 | 100) => {
-    if (gameState.money < tempBet + value) return;
+  const handleChipPress = (value: number, denom: number) => {
+    if (gameState.money < value) return; // Only check the chip being added
     setActivePulseDenom(denom);
     setTimeout(() => setActivePulseDenom(null), 300);
-    addChipToPot(value, denom);
+
+    // Deduct money and add bet immediately
+    setGameState(prev => ({ ...prev, money: prev.money - value }));
+    setTempBet(v => v + value);
+
+    addChipToPot(value, denom, true);
   };
 
   const currentActiveHand = gameState.playerHands[gameState.activeHandIndex];
@@ -631,24 +707,23 @@ const App: React.FC = () => {
         {gameState.status === 'BETTING' && (
           <View style={styles.betControls}>
             <View style={styles.chipsRow}>
-              <TouchableOpacity onPress={() => handleChipPress(10, 10)}>
-                <CasinoChip value={10} denom={10} size={54} style={activePulseDenom === 10 && styles.chipActive} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleChipPress(50, 50)}>
-                <CasinoChip value={50} denom={50} size={54} style={activePulseDenom === 50 && styles.chipActive} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleChipPress(100, 100)}>
-                <CasinoChip value={100} denom={100} size={54} style={activePulseDenom === 100 && styles.chipActive} />
-              </TouchableOpacity>
+              {CHIP_CONFIG.filter(c => (gameState.money + tempBet) >= c.minBalance).map(chip => (
+                <TouchableOpacity key={chip.denom} onPress={() => handleChipPress(chip.denom, chip.denom as any)}>
+                  <CasinoChip
+                    value={chip.denom}
+                    denom={chip.denom}
+                    size={width > 400 ? 54 : 48}
+                    style={activePulseDenom === chip.denom && styles.chipActive}
+                  />
+                </TouchableOpacity>
+              ))}
             </View>
             <TouchableOpacity
               onPress={startNewGame}
-              disabled={tempBet < MIN_BET}
-              style={[styles.dealButton, tempBet < MIN_BET && styles.dealButtonDisabled]}
+              disabled={tempBet === 0}
+              style={[styles.dealButton, tempBet === 0 && styles.dealButtonDisabled]}
             >
-              <Text style={styles.dealButtonText}>
-                {tempBet < MIN_BET ? `MIN BET $${MIN_BET}` : 'DEAL'}
-              </Text>
+              <Text style={styles.dealButtonText}>DEAL</Text>
             </TouchableOpacity>
           </View>
         )}
