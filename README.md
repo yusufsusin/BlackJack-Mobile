@@ -1,20 +1,43 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# BlackJack Mobile
 
-# Run and deploy your AI Studio app
+A professional Blackjack game built with React Native and Expo, featuring a modern design and smooth animations.
 
-This contains everything you need to run your app locally.
+## 🚀 Key Features
 
-View your app in AI Studio: https://ai.studio/apps/drive/1Yir4TiwSqiV4h1edrKBYeZvzV-7QuaP6
+- **Advanced Betting Experience**: A smart betting system where chips automatically center themselves in the pot area and shift dynamically as new denominations are added.
+- **Fluid Animations**: High-performance animations using the `Animated` API for flying chips, card dealing, and pot "pop" effects.
+- **Game Mechanics**: Full implementation of standard Blackjack rules, including Split, Double Down, Dealer hitting on soft 17, and more.
+- **Dynamic Chip Availability**: Higher-value chips ($200, $500, and $1000) automatically appear in the menu as your total wealth (Cash + Current Bet) increases.
+- **Bankruptcy Protection**: An automatic bonus system that grants $1,000 if your balance and current bet both hit zero, ensuring the game never stops.
 
-## Run Locally
+## 🛠️ Tech Stack
 
-**Prerequisites:**  Node.js
+- **Framework**: [React Native](https://reactnative.dev/) with [Expo](https://expo.dev/)
+- **Language**: [TypeScript](https://www.typescriptlang.org/)
+- **State Management**: React Hooks (`useState`, `useCallback`, `useRef`)
+- **Animations**: `Animated` API with Native Driver support
+- **UI/UX**: Custom-designed casino-themed components
 
+## 📦 Installation & Setup
 
 1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+   ```bash
+   npm install
+   ```
+
+2. Start the application:
+   ```bash
+   npx expo start
+   ```
+
+3. Open the app via the Expo Go app by scanning the QR code, or use an iOS/Android emulator.
+
+## 🎮 How to Play
+
+1. **Place Your Bet**: Click on any chip at the bottom to add it to the pot. If you want to undo a bet, simply click the chips already in the pot.
+2. **Deal**: Press the "DEAL" button to start the hand.
+3. **Make Your Move**: Choose to Hit, Stand, Double Down, or Split based on your hand's value.
+4. **Win**: Beat the dealer's hand without busting to increase your bankroll!
+
+---
+*Developed as a hobby project to showcase modern React Native development.*
