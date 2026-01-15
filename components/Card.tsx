@@ -21,8 +21,8 @@ export const Card: React.FC<CardProps> = ({ card, index }) => {
   useEffect(() => {
     Animated.timing(dealAnim, {
       toValue: 1,
-      duration: 300,
-      delay: index * 100,
+      duration: 250,
+      delay: index * 50,
       easing: Easing.out(Easing.quad),
       useNativeDriver: true,
     }).start();

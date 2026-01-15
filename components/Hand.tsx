@@ -19,7 +19,24 @@ const CARD_WIDTH = isSmallDevice ? 56 : 72;
 const CARD_OVERLAP = isSmallDevice ? 20 : 25;
 
 export const Hand: React.FC<HandProps> = ({ cards, showValue = true, position, isFinished = false, hand }) => {
-  const { total1, total2 } = calculateHandValue(cards);
+  const [displayedCards, setDisplayedCards] = React.useState(cards);
+
+  React.useEffect(() => {
+    // If it's the dealer's initial hide/show or game over, update immediately
+    // Otherwise, delay to match card land animation (250ms)
+    const isDealerInitial = position === 'top' && cards.length === 2 && cards.some(c => c.isHidden);
+
+    if (isDealerInitial || isFinished) {
+      setDisplayedCards(cards);
+    } else {
+      const timer = setTimeout(() => {
+        setDisplayedCards(cards);
+      }, 250);
+      return () => clearTimeout(timer);
+    }
+  }, [cards, isFinished, position]);
+
+  const { total1, total2 } = calculateHandValue(displayedCards);
 
   const displayValue = () => {
     if (cards.some(c => c.isHidden)) {

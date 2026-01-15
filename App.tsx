@@ -94,7 +94,50 @@ const App: React.FC = () => {
   const [flyingChips, setFlyingChips] = useState<{ id: number, value: number, denom: number, anim: Animated.ValueXY }[]>([]);
   const [activePulseDenom, setActivePulseDenom] = useState<number | null>(null);
 
+  const [isGameStarted, setIsGameStarted] = useState(false);
+  const [showBankruptcy, setShowBankruptcy] = useState(false);
+
   const potScale = useRef(new Animated.Value(1)).current;
+  const startScreenOpacity = useRef(new Animated.Value(1)).current;
+  const bankruptcyOpacity = useRef(new Animated.Value(0)).current;
+
+  const handleStartGame = () => {
+    Animated.timing(startScreenOpacity, {
+      toValue: 0,
+      duration: 500,
+      useNativeDriver: true,
+    }).start(() => setIsGameStarted(true));
+  };
+
+  const handleBankruptcyReset = () => {
+    // Standard bankruptcy reset
+    setGameState(prev => ({
+      ...prev,
+      money: 1000,
+      message: '$1000 REFILL GRANTED'
+    }));
+    setTempBet(0);
+    setChipsInPot([]);
+
+    // Hide overlay
+    Animated.timing(bankruptcyOpacity, {
+      toValue: 0,
+      duration: 500,
+      useNativeDriver: true,
+    }).start(() => setShowBankruptcy(false));
+  };
+
+  useEffect(() => {
+    // Show bankruptcy screen when money is 0 AND no active bet/chips
+    if (isGameStarted && gameState.money === 0 && tempBet === 0 && chipsInPot.length === 0 && gameState.status === 'BETTING') {
+      setShowBankruptcy(true);
+      Animated.timing(bankruptcyOpacity, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [gameState.money, tempBet, chipsInPot.length, gameState.status, isGameStarted]);
 
   const startNewGame = useCallback(() => {
     if (tempBet < MIN_BET) {
@@ -359,7 +402,7 @@ const App: React.FC = () => {
 
         if (!isInitialBlackjack) {
           while (dt1 < 17 || (dt1 > 21 && dt2 < 17)) {
-            await delay(1200); // 1.2s delay between cards
+            await delay(600); // Brisk 600ms delay between cards
             const newCard = currentDeck.pop()!;
             currentDealerHand.push(newCard);
             const nextVal = calculateHandValue(currentDealerHand);
@@ -466,29 +509,18 @@ const App: React.FC = () => {
   }, [getUniquePotDenoms, getChipOffsetX]);
 
   const resetGame = () => {
-    setGameState(prev => {
-      const newState: GameState = {
-        ...prev,
-        money: prev.money + (prev.status === 'BETTING' ? tempBet : 0),
-        status: 'BETTING',
-        message: '',
-        playerHands: [],
-        dealerHand: [],
-        activeHandIndex: 0,
-        isDealerDone: false
-      };
-
-      // Check bankruptcy here when resetting for next hand
-      if (prev.money === 0 && tempBet === 0) {
-        newState.money = 1000;
-        newState.message = 'Bakiyeniz tükendi, 1000$ ikramiye tanımlandı';
-      }
-
-      return newState;
-    });
+    setGameState(prev => ({
+      ...prev,
+      money: prev.money + (prev.status === 'BETTING' ? tempBet : 0),
+      status: 'BETTING',
+      message: '',
+      playerHands: [],
+      dealerHand: [],
+      activeHandIndex: 0,
+      isDealerDone: false
+    }));
     setTempBet(0);
     setChipsInPot([]);
-    // refreshUI is implicitly called by setting chips to empty, but good to have
   };
 
 
@@ -759,6 +791,30 @@ const App: React.FC = () => {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Start Screen Overlay */}
+      {!isGameStarted && (
+        <Animated.View style={[styles.overlay, { opacity: startScreenOpacity, zIndex: 100 }]}>
+          <View style={styles.overlayContent}>
+            <Text style={styles.startTitle}>BLACKJACK</Text>
+            <TouchableOpacity style={styles.startBtn} onPress={handleStartGame}>
+              <Text style={styles.startBtnText}>START GAME</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      )}
+
+      {/* Bankruptcy Overlay */}
+      {showBankruptcy && (
+        <Animated.View style={[styles.overlay, { opacity: bankruptcyOpacity, zIndex: 200 }]}>
+          <View style={styles.overlayContent}>
+            <Text style={styles.bankruptcyTitle}>GAME OVER</Text>
+            <TouchableOpacity style={styles.bankruptcyBtn} onPress={handleBankruptcyReset}>
+              <Text style={styles.bankruptcyBtnText}>$1000 ENTRY</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      )}
     </SafeAreaView>
   );
 };
@@ -985,7 +1041,60 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.15 }],
     backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 30,
-  }
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  overlayContent: {
+    alignItems: 'center',
+    padding: 20,
+  },
+  startTitle: {
+    fontSize: 48,
+    fontWeight: '900',
+    color: '#FFD700',
+    letterSpacing: 4,
+    marginBottom: 40,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 10,
+  },
+  startBtn: {
+    backgroundColor: '#10b981',
+    paddingHorizontal: 40,
+    paddingVertical: 15,
+    borderRadius: 30,
+    borderWidth: 2,
+    borderColor: '#34d399',
+  },
+  startBtnText: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  bankruptcyTitle: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: '#ef4444',
+    marginBottom: 30,
+  },
+  bankruptcyBtn: {
+    backgroundColor: '#7c3aed',
+    paddingHorizontal: 30,
+    paddingVertical: 12,
+    borderRadius: 25,
+    borderWidth: 2,
+    borderColor: '#a78bfa',
+  },
+  bankruptcyBtnText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '900',
+  },
 });
 
 export default App;
