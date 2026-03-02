@@ -16,6 +16,7 @@ import { GameStatus, CardType, GameState, PlayerHand } from './types';
 import { createDeck, calculateHandValue, getBestValue, isBlackjack } from './utils/gameLogic';
 import { Hand } from './components/Hand';
 import { INITIAL_MONEY, MIN_BET } from './constants';
+import VolumeSlider from './components/VolumeSlider';
 
 const { width, height } = Dimensions.get('window');
 
@@ -80,9 +81,19 @@ const CasinoChip: React.FC<{
 
 interface AppProps {
   onGoToMenu?: () => void;
+  musicVolume: number;
+  gameVolume: number;
+  onChangeMusicVolume: (v: number) => void;
+  onChangeGameVolume: (v: number) => void;
 }
 
-const App: React.FC<AppProps> = ({ onGoToMenu }) => {
+const App: React.FC<AppProps> = ({
+  onGoToMenu,
+  musicVolume,
+  gameVolume,
+  onChangeMusicVolume,
+  onChangeGameVolume,
+}) => {
   const [gameState, setGameState] = useState<GameState>({
     money: INITIAL_MONEY,
     playerHands: [],
@@ -93,6 +104,7 @@ const App: React.FC<AppProps> = ({ onGoToMenu }) => {
     message: '',
   });
 
+  const [showSettings, setShowSettings] = useState(false);
   const [tempBet, setTempBet] = useState(0);
   const [chipsInPot, setChipsInPot] = useState<ChipInPot[]>([]);
   const [flyingChips, setFlyingChips] = useState<{ id: number, value: number, denom: number, anim: Animated.ValueXY }[]>([]);
@@ -100,7 +112,7 @@ const App: React.FC<AppProps> = ({ onGoToMenu }) => {
 
   const [isGameStarted] = useState(true);
   const [showBankruptcy, setShowBankruptcy] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+
 
   const potScale = useRef(new Animated.Value(1)).current;
   const bankruptcyOpacity = useRef(new Animated.Value(0)).current;
@@ -791,7 +803,8 @@ const App: React.FC<AppProps> = ({ onGoToMenu }) => {
         )}
       </View>
 
-      {/* Settings Modal */}
+
+      {/* In-Game Settings Overlay */}
       {showSettings && (
         <>
           <TouchableOpacity
@@ -800,15 +813,43 @@ const App: React.FC<AppProps> = ({ onGoToMenu }) => {
             onPress={() => setShowSettings(false)}
           />
           <View style={styles.settingsModal}>
+            {/* Close button */}
             <TouchableOpacity
-              style={styles.mainMenuBtn}
+              style={styles.settingsCloseBtn}
+              onPress={() => setShowSettings(false)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.settingsCloseText}>✕</Text>
+            </TouchableOpacity>
+
+            {/* Music */}
+            <View style={styles.settingsSliderRow}>
+              <Text style={styles.settingsSliderLabel}>Music</Text>
+              <Text style={styles.settingsSliderValue}>{musicVolume}%</Text>
+            </View>
+            <VolumeSlider value={musicVolume} onChange={onChangeMusicVolume} />
+
+            <View style={styles.settingsDivider} />
+
+            {/* Game Sound */}
+            <View style={styles.settingsSliderRow}>
+              <Text style={styles.settingsSliderLabel}>Game Sound</Text>
+              <Text style={styles.settingsSliderValue}>{gameVolume}%</Text>
+            </View>
+            <VolumeSlider value={gameVolume} onChange={onChangeGameVolume} />
+
+            <View style={styles.settingsDivider} />
+
+            {/* Main Menu */}
+            <TouchableOpacity
+              style={styles.settingsMenuBtn}
               activeOpacity={0.8}
               onPress={() => {
                 setShowSettings(false);
                 onGoToMenu?.();
               }}
             >
-              <Text style={styles.mainMenuBtnText}>Main Menu</Text>
+              <Text style={styles.settingsMenuBtnText}>Main Menu</Text>
             </TouchableOpacity>
           </View>
         </>
@@ -1062,42 +1103,76 @@ const styles = StyleSheet.create({
   },
   settingsBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    backgroundColor: 'rgba(0,0,0,0.72)',
     zIndex: 300,
   },
   settingsModal: {
     position: 'absolute',
-    left: 40,
-    right: 40,
-    top: '40%',
+    left: 24,
+    right: 24,
+    top: '25%',
     zIndex: 301,
-    backgroundColor: '#065f46',
+    backgroundColor: '#054a38',
     borderRadius: 20,
-    padding: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    elevation: 20,
+    paddingTop: 44,
+    paddingHorizontal: 24,
+    paddingBottom: 24,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.6,
+    shadowRadius: 20,
+    elevation: 24,
   },
-  mainMenuBtn: {
-    width: '100%',
-    backgroundColor: '#f59e0b',
-    paddingVertical: 16,
+  settingsCloseBtn: {
+    position: 'absolute',
+    top: 12,
+    right: 14,
+    padding: 6,
+  },
+  settingsCloseText: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.45)',
+    fontWeight: '600',
+  },
+  settingsSliderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  settingsSliderLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  settingsSliderValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#eab84e',
+    minWidth: 40,
+    textAlign: 'right',
+  },
+  settingsDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginVertical: 16,
+  },
+  settingsMenuBtn: {
+    backgroundColor: '#deb737',
+    paddingVertical: 14,
     borderRadius: 30,
     alignItems: 'center',
-    shadowColor: '#f59e0b',
-    shadowOffset: { width: 0, height: 4 },
+    shadowColor: '#eab84e',
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 8,
+    elevation: 6,
   },
-  mainMenuBtnText: {
-    fontSize: 17,
-    fontWeight: '900',
+  settingsMenuBtnText: {
+    fontSize: 15,
+    fontWeight: '800',
     color: '#1a1a1a',
     letterSpacing: 0.3,
   },

@@ -13,9 +13,10 @@ import {
 
 interface Props {
   onStartClassic: () => void;
+  onOpenSettings: () => void;
 }
 
-const MainMenu: React.FC<Props> = ({ onStartClassic }) => {
+const MainMenu: React.FC<Props> = ({ onStartClassic, onOpenSettings }) => {
   const spinValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -82,7 +83,7 @@ const MainMenu: React.FC<Props> = ({ onStartClassic }) => {
             <Text style={styles.soonBtnText}>Blackjack + (Soon)</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.settingsBtn} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.settingsBtn} onPress={onOpenSettings} activeOpacity={0.8}>
             <Text style={styles.settingsBtnText}>Settings</Text>
           </TouchableOpacity>
         </View>
@@ -109,7 +110,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: '900',
-    color: '#eab84e',
+    color: '#fcc65a',
     letterSpacing: 0.5,
     textShadowColor: 'rgba(0,0,0,0.6)',
     textShadowOffset: { width: 0, height: 3 },
