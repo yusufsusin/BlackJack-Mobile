@@ -10,7 +10,8 @@ import {
   Animated,
   Platform,
   StatusBar,
-  Easing
+  Easing,
+  ScrollView
 } from 'react-native';
 import { GameStatus, CardType, GameState, PlayerHand } from './types';
 import { createDeck, calculateHandValue, getBestValue, isBlackjack } from './utils/gameLogic';
@@ -564,10 +565,10 @@ const App: React.FC = () => {
 
     const inPot = chipsInPot.filter(c => c.denom === denom).length;
     const flying = flyingChips.filter(c => c.denom === denom).length;
-    const currentCount = inPot + flying;
+    const currentCount = Math.min(inPot + flying, 5); // Cap visual height for animation
 
     const offsetX = getChipOffsetX(denom, sortedDenoms);
-    const offsetY = -currentCount * 4;
+    const offsetY = currentCount * -4;
     const rotation = 0;
 
     // Shift ALL existing chips in the pot immediately to make room for the new set of columns
@@ -619,6 +620,54 @@ const App: React.FC = () => {
     setTempBet(v => v + value);
 
     addChipToPot(value, denom, true);
+  };
+
+  const handleAllIn = () => {
+    if (gameState.money <= 0) return;
+
+    let remaining = gameState.money;
+
+    // Break down the entire amount into existing chip denominations
+    const denoms = [...CHIP_CONFIG].map(c => c.denom).sort((a, b) => b - a);
+    const chipsToAdd: { value: number; count: number }[] = [];
+
+    for (const d of denoms) {
+      const count = Math.floor(remaining / d);
+      if (count > 0) {
+        chipsToAdd.push({ value: d, count });
+        remaining -= count * d;
+      }
+    }
+
+    // Add any tiny remainder as a "custom" value chip if necessary, 
+    // though in standard game amounts are usually multiples of 5.
+    if (remaining > 0) {
+      chipsToAdd.push({ value: remaining, count: 1 });
+    }
+
+    // Sequence the chips into the pot
+    let delayCounter = 0;
+    chipsToAdd.forEach(item => {
+      for (let i = 0; i < item.count; i++) {
+        // Limit visual clutter for massive stacks, but keep math exact
+        // We'll add physical chips for up to 15 total items in the sequence
+        if (delayCounter < 15) {
+          setTimeout(() => {
+            // We'll call addChipToPot WITHOUT 'silent' because we're 
+            // moving money chip-by-chip to keep everything in sync.
+            // But we need to deduct the money from gameState first or inside.
+            // Let's call handleChipPress logic instead for consistency.
+            handleChipPress(item.value, item.value as any);
+          }, delayCounter * 60);
+          delayCounter++;
+        } else {
+          // For any remaining chips that would over-clutter, add them silently 
+          // to the logic to ensure the math is 100% correct.
+          setGameState(prev => ({ ...prev, money: prev.money - item.value }));
+          setTempBet(v => v + item.value);
+        }
+      }
+    });
   };
 
   const currentActiveHand = gameState.playerHands[gameState.activeHandIndex];
@@ -695,29 +744,35 @@ const App: React.FC = () => {
         </View>
 
         <Animated.View style={[styles.potZone, { transform: [{ scale: potScale }] }]}>
-          {chipsInPot.map((chip, idx) => (
-            <TouchableOpacity
-              key={chip.id}
-              activeOpacity={0.8}
-              onPress={() => removeChipFromPot(chip.id)}
-              disabled={gameState.status !== 'BETTING'}
-              style={{
-                position: 'absolute',
-                transform: [
-                  { translateX: chip.offsetX },
-                  { translateY: chip.offsetY },
-                  { rotate: `${chip.rotation}deg` }
-                ],
-                zIndex: idx
-              }}
-            >
-              <CasinoChip
-                value={chip.value}
-                denom={chip.denom}
-                size={44}
-              />
-            </TouchableOpacity>
-          ))}
+          {getUniquePotDenoms().map(denom => {
+            const chipsOfDenom = chipsInPot.filter(c => c.denom === denom);
+            // Limit visual stack to last 6 chips
+            const visibleChips = chipsOfDenom.slice(-6);
+
+            return visibleChips.map((chip, idx) => (
+              <TouchableOpacity
+                key={chip.id}
+                activeOpacity={0.8}
+                onPress={() => removeChipFromPot(chip.id)}
+                disabled={gameState.status !== 'BETTING'}
+                style={{
+                  position: 'absolute',
+                  transform: [
+                    { translateX: chip.offsetX },
+                    { translateY: idx * -4 },
+                    { rotate: `${chip.rotation}deg` }
+                  ],
+                  zIndex: idx
+                }}
+              >
+                <CasinoChip
+                  value={chip.value}
+                  denom={chip.denom}
+                  size={44}
+                />
+              </TouchableOpacity>
+            ));
+          })}
 
           {flyingChips.map(chip => (
             <Animated.View
@@ -738,9 +793,18 @@ const App: React.FC = () => {
 
         {gameState.status === 'BETTING' && (
           <View style={styles.betControls}>
-            <View style={styles.chipsRow}>
-              {CHIP_CONFIG.filter(c => (gameState.money + tempBet) >= c.minBalance).map(chip => (
-                <TouchableOpacity key={chip.denom} onPress={() => handleChipPress(chip.denom, chip.denom as any)}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipsScrollContent}
+              style={styles.chipsScrollView}
+            >
+              {CHIP_CONFIG.filter(c => (gameState.money + tempBet) >= c.minBalance && gameState.money >= c.denom).map(chip => (
+                <TouchableOpacity
+                  key={chip.denom}
+                  onPress={() => handleChipPress(chip.denom, chip.denom as any)}
+                  style={styles.chipWrapper}
+                >
                   <CasinoChip
                     value={chip.denom}
                     denom={chip.denom}
@@ -749,14 +813,23 @@ const App: React.FC = () => {
                   />
                 </TouchableOpacity>
               ))}
+            </ScrollView>
+            <View style={styles.betButtonRow}>
+              <TouchableOpacity
+                onPress={handleAllIn}
+                disabled={gameState.money <= 0}
+                style={[styles.allInButton, gameState.money <= 0 && styles.dealButtonDisabled]}
+              >
+                <Text style={styles.allInButtonText}>ALL IN</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={startNewGame}
+                disabled={tempBet === 0}
+                style={[styles.dealButton, tempBet === 0 && styles.dealButtonDisabled]}
+              >
+                <Text style={styles.dealButtonText}>DEAL</Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              onPress={startNewGame}
-              disabled={tempBet === 0}
-              style={[styles.dealButton, tempBet === 0 && styles.dealButtonDisabled]}
-            >
-              <Text style={styles.dealButtonText}>DEAL</Text>
-            </TouchableOpacity>
           </View>
         )}
 
@@ -930,12 +1003,22 @@ const styles = StyleSheet.create({
   betControls: {
     gap: 15,
   },
-  chipsRow: {
+  chipsScrollView: {
+    height: 70,
+  },
+  chipsScrollContent: {
+    paddingHorizontal: 20,
+    gap: 15,
+    alignItems: 'center',
     flexDirection: 'row',
+    flexGrow: 1,
     justifyContent: 'center',
-    gap: 20,
+  },
+  chipWrapper: {
+    paddingVertical: 5,
   },
   dealButton: {
+    flex: 2,
     backgroundColor: '#f59e0b',
     paddingVertical: 15,
     borderRadius: 18,
@@ -945,6 +1028,27 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 5,
     elevation: 8,
+  },
+  allInButton: {
+    flex: 1,
+    backgroundColor: '#dc2626', // Red for high risk
+    paddingVertical: 15,
+    borderRadius: 18,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
+  },
+  betButtonRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  allInButtonText: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: 'white',
   },
   dealButtonDisabled: {
     backgroundColor: 'rgba(255,255,255,0.05)',
