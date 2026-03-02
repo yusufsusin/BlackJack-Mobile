@@ -16,6 +16,7 @@ import { GameStatus, CardType, GameState, PlayerHand } from './types';
 import { createDeck, calculateHandValue, getBestValue, isBlackjack } from './utils/gameLogic';
 import { Hand } from './components/Hand';
 import { INITIAL_MONEY, MIN_BET } from './constants';
+import VolumeSlider from './components/VolumeSlider';
 
 const { width, height } = Dimensions.get('window');
 
@@ -78,7 +79,21 @@ const CasinoChip: React.FC<{
   );
 };
 
-const App: React.FC = () => {
+interface AppProps {
+  onGoToMenu?: () => void;
+  musicVolume: number;
+  gameVolume: number;
+  onChangeMusicVolume: (v: number) => void;
+  onChangeGameVolume: (v: number) => void;
+}
+
+const App: React.FC<AppProps> = ({
+  onGoToMenu,
+  musicVolume,
+  gameVolume,
+  onChangeMusicVolume,
+  onChangeGameVolume,
+}) => {
   const [gameState, setGameState] = useState<GameState>({
     money: INITIAL_MONEY,
     playerHands: [],
@@ -89,25 +104,18 @@ const App: React.FC = () => {
     message: '',
   });
 
+  const [showSettings, setShowSettings] = useState(false);
   const [tempBet, setTempBet] = useState(0);
   const [chipsInPot, setChipsInPot] = useState<ChipInPot[]>([]);
   const [flyingChips, setFlyingChips] = useState<{ id: number, value: number, denom: number, anim: Animated.ValueXY }[]>([]);
   const [activePulseDenom, setActivePulseDenom] = useState<number | null>(null);
 
-  const [isGameStarted, setIsGameStarted] = useState(false);
+  const [isGameStarted] = useState(true);
   const [showBankruptcy, setShowBankruptcy] = useState(false);
 
-  const potScale = useRef(new Animated.Value(1)).current;
-  const startScreenOpacity = useRef(new Animated.Value(1)).current;
-  const bankruptcyOpacity = useRef(new Animated.Value(0)).current;
 
-  const handleStartGame = () => {
-    Animated.timing(startScreenOpacity, {
-      toValue: 0,
-      duration: 500,
-      useNativeDriver: true,
-    }).start(() => setIsGameStarted(true));
-  };
+  const potScale = useRef(new Animated.Value(1)).current;
+  const bankruptcyOpacity = useRef(new Animated.Value(0)).current;
 
   const handleBankruptcyReset = () => {
     // Standard bankruptcy reset
@@ -645,10 +653,13 @@ const App: React.FC = () => {
           <Text style={styles.bankrollLabel}>BANKROLL</Text>
           <Text style={styles.bankrollValue}>${gameState.money}</Text>
         </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <Text style={styles.rulesText}>Blackjack 3:2</Text>
-          <Text style={styles.rulesTextSub}>Dealer stands on 17</Text>
-        </View>
+        <TouchableOpacity
+          onPress={() => setShowSettings(true)}
+          style={styles.settingsHeaderBtn}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Text style={styles.settingsHeaderIcon}>⚙</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.table}>
@@ -792,16 +803,56 @@ const App: React.FC = () => {
         )}
       </View>
 
-      {/* Start Screen Overlay */}
-      {!isGameStarted && (
-        <Animated.View style={[styles.overlay, { opacity: startScreenOpacity, zIndex: 100 }]}>
-          <View style={styles.overlayContent}>
-            <Text style={styles.startTitle}>BLACKJACK</Text>
-            <TouchableOpacity style={styles.startBtn} onPress={handleStartGame}>
-              <Text style={styles.startBtnText}>START GAME</Text>
+
+      {/* In-Game Settings Overlay */}
+      {showSettings && (
+        <>
+          <TouchableOpacity
+            style={styles.settingsBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowSettings(false)}
+          />
+          <View style={styles.settingsModal}>
+            {/* Close button */}
+            <TouchableOpacity
+              style={styles.settingsCloseBtn}
+              onPress={() => setShowSettings(false)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.settingsCloseText}>✕</Text>
+            </TouchableOpacity>
+
+            {/* Music */}
+            <View style={styles.settingsSliderRow}>
+              <Text style={styles.settingsSliderLabel}>Music</Text>
+              <Text style={styles.settingsSliderValue}>{musicVolume}%</Text>
+            </View>
+            <VolumeSlider value={musicVolume} onChange={onChangeMusicVolume} />
+
+            <View style={styles.settingsDivider} />
+
+            {/* Game Sound */}
+            <View style={styles.settingsSliderRow}>
+              <Text style={styles.settingsSliderLabel}>Game Sound</Text>
+              <Text style={styles.settingsSliderValue}>{gameVolume}%</Text>
+            </View>
+            <VolumeSlider value={gameVolume} onChange={onChangeGameVolume} />
+
+            <View style={styles.settingsDivider} />
+
+            {/* Main Menu */}
+            <TouchableOpacity
+              style={styles.settingsMenuBtn}
+              activeOpacity={0.8}
+              onPress={() => {
+                setShowSettings(false);
+                onGoToMenu?.();
+              }}
+            >
+              <Text style={styles.settingsMenuBtnText}>Main Menu</Text>
             </TouchableOpacity>
           </View>
-        </Animated.View>
+        </>
       )}
 
       {/* Bankruptcy Overlay */}
@@ -845,16 +896,14 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#FFD700', // Casino Gold
   },
-  rulesText: {
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.4)',
-    fontWeight: '900',
-    fontStyle: 'italic',
+  settingsHeaderBtn: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 4,
   },
-  rulesTextSub: {
-    fontSize: 8,
-    color: 'rgba(255,255,255,0.2)',
-    fontWeight: '900',
+  settingsHeaderIcon: {
+    fontSize: 22,
+    color: 'rgba(255,255,255,0.55)',
   },
   table: {
     flex: 1,
@@ -1052,29 +1101,80 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
-  startTitle: {
-    fontSize: 48,
-    fontWeight: '900',
-    color: '#FFD700',
-    letterSpacing: 4,
-    marginBottom: 40,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 4 },
-    textShadowRadius: 10,
+  settingsBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    zIndex: 300,
   },
-  startBtn: {
-    backgroundColor: '#10b981',
-    paddingHorizontal: 40,
-    paddingVertical: 15,
+  settingsModal: {
+    position: 'absolute',
+    left: 24,
+    right: 24,
+    top: '25%',
+    zIndex: 301,
+    backgroundColor: '#054a38',
+    borderRadius: 20,
+    paddingTop: 44,
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.6,
+    shadowRadius: 20,
+    elevation: 24,
+  },
+  settingsCloseBtn: {
+    position: 'absolute',
+    top: 12,
+    right: 14,
+    padding: 6,
+  },
+  settingsCloseText: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.45)',
+    fontWeight: '600',
+  },
+  settingsSliderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  settingsSliderLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  settingsSliderValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#eab84e',
+    minWidth: 40,
+    textAlign: 'right',
+  },
+  settingsDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginVertical: 16,
+  },
+  settingsMenuBtn: {
+    backgroundColor: '#deb737',
+    paddingVertical: 14,
     borderRadius: 30,
-    borderWidth: 2,
-    borderColor: '#34d399',
+    alignItems: 'center',
+    shadowColor: '#eab84e',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  startBtnText: {
-    color: 'white',
-    fontSize: 20,
-    fontWeight: '900',
-    letterSpacing: 1,
+  settingsMenuBtnText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1a1a1a',
+    letterSpacing: 0.3,
   },
   bankruptcyTitle: {
     fontSize: 32,
