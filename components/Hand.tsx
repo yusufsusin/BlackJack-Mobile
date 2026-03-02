@@ -31,7 +31,7 @@ export const Hand: React.FC<HandProps> = ({ cards, showValue = true, position, i
     } else {
       const timer = setTimeout(() => {
         setDisplayedCards(cards);
-      }, 250);
+      }, 600);
       return () => clearTimeout(timer);
     }
   }, [cards, isFinished, position]);
