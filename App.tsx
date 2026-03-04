@@ -32,13 +32,13 @@ interface ChipInPot {
 }
 
 const CHIP_CONFIG = [
-  { denom: 5, color: '#4caf50', minBalance: 0 },      // Green
-  { denom: 10, color: '#c62828', minBalance: 0 },     // Red
-  { denom: 50, color: '#1e40af', minBalance: 0 },     // Blue
-  { denom: 100, color: '#1a1a1a', minBalance: 0 },    // Black
-  { denom: 200, color: '#7b1fa2', minBalance: 3000 },  // Purple
-  { denom: 500, color: '#f57c00', minBalance: 6000 },  // Orange
-  { denom: 1000, color: '#ffd700', minBalance: 10000 }, // Gold/Yellow
+  { denom: 5, color: '#4caf50', minBalance: 0 },       // Green
+  { denom: 10, color: '#c62828', minBalance: 0 },      // Red
+  { denom: 25, color: '#1e40af', minBalance: 0 },      // Blue
+  { denom: 50, color: '#1a1a1a', minBalance: 200 },    // Black
+  { denom: 100, color: '#7b1fa2', minBalance: 500 },   // Purple
+  { denom: 250, color: '#f57c00', minBalance: 1000 },  // Orange
+  { denom: 500, color: '#ffd700', minBalance: 2500 },  // Gold/Yellow
 ];
 
 
@@ -85,6 +85,9 @@ interface AppProps {
   gameVolume: number;
   onChangeMusicVolume: (v: number) => void;
   onChangeGameVolume: (v: number) => void;
+  initialMoney: number;
+  highScore: number;
+  onStatsUpdate: (money: number, highScore: number) => void;
 }
 
 const App: React.FC<AppProps> = ({
@@ -93,9 +96,12 @@ const App: React.FC<AppProps> = ({
   gameVolume,
   onChangeMusicVolume,
   onChangeGameVolume,
+  initialMoney,
+  highScore,
+  onStatsUpdate,
 }) => {
   const [gameState, setGameState] = useState<GameState>({
-    money: INITIAL_MONEY,
+    money: initialMoney,
     playerHands: [],
     activeHandIndex: 0,
     dealerHand: [],
@@ -118,14 +124,15 @@ const App: React.FC<AppProps> = ({
   const bankruptcyOpacity = useRef(new Animated.Value(0)).current;
 
   const handleBankruptcyReset = () => {
-    // Standard bankruptcy reset
+    const resetMoney = INITIAL_MONEY;
     setGameState(prev => ({
       ...prev,
-      money: 1000,
-      message: '$1000 REFILL GRANTED'
+      money: resetMoney,
+      message: `$${INITIAL_MONEY} REFILL GRANTED`
     }));
     setTempBet(0);
     setChipsInPot([]);
+    onStatsUpdate(resetMoney, highScore);
 
     // Hide overlay
     Animated.timing(bankruptcyOpacity, {
@@ -146,6 +153,13 @@ const App: React.FC<AppProps> = ({
       }).start();
     }
   }, [gameState.money, tempBet, chipsInPot.length, gameState.status, isGameStarted]);
+
+  useEffect(() => {
+    if (gameState.status === 'GAME_OVER') {
+      const newHighScore = Math.max(gameState.money, highScore);
+      onStatsUpdate(gameState.money, newHighScore);
+    }
+  }, [gameState.status]);
 
   const startNewGame = useCallback(() => {
     if (tempBet < MIN_BET) {
@@ -861,7 +875,7 @@ const App: React.FC<AppProps> = ({
           <View style={styles.overlayContent}>
             <Text style={styles.bankruptcyTitle}>GAME OVER</Text>
             <TouchableOpacity style={styles.bankruptcyBtn} onPress={handleBankruptcyReset}>
-              <Text style={styles.bankruptcyBtnText}>$1000 ENTRY</Text>
+              <Text style={styles.bankruptcyBtnText}>${INITIAL_MONEY} ENTRY</Text>
             </TouchableOpacity>
           </View>
         </Animated.View>
