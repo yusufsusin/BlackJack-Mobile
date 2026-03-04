@@ -12,13 +12,14 @@ import {
   StatusBar,
   Easing,
   ScrollView,
-  Alert,
+  Modal,
 } from 'react-native';
 import { GameStatus, CardType, GameState, PlayerHand } from './types';
 import { createDeck, calculateHandValue, getBestValue, isBlackjack } from './utils/gameLogic';
 import { Hand } from './components/Hand';
 import { INITIAL_MONEY, MIN_BET } from './constants';
 import VolumeSlider from './components/VolumeSlider';
+import { Ionicons } from '@expo/vector-icons';
 
 const { width, height } = Dimensions.get('window');
 
@@ -115,6 +116,7 @@ const App: React.FC<AppProps> = ({
   });
 
   const [showSettings, setShowSettings] = useState(false);
+  const [showRefreshConfirm, setShowRefreshConfirm] = useState(false);
   const [tempBet, setTempBet] = useState(0);
   const [chipsInPot, setChipsInPot] = useState<ChipInPot[]>([]);
   const [flyingChips, setFlyingChips] = useState<{ id: number, value: number, denom: number, anim: Animated.ValueXY }[]>([]);
@@ -128,42 +130,23 @@ const App: React.FC<AppProps> = ({
   const bankruptcyOpacity = useRef(new Animated.Value(0)).current;
 
   const handleRefreshReset = () => {
-    const labels = {
-      tr: {
-        title: 'Emin misin?',
-        message: '$100 ile yeniden başlayacaksın.',
-        cancel: 'İptal',
-        confirm: 'Başla',
-      },
-      en: {
-        title: 'Are you sure?',
-        message: 'You will restart with $100.',
-        cancel: 'Cancel',
-        confirm: 'Restart',
-      },
-    };
-    const t = labels[language];
-    Alert.alert(t.title, t.message, [
-      { text: t.cancel, style: 'cancel' },
-      {
-        text: t.confirm,
-        style: 'destructive',
-        onPress: () => {
-          const resetMoney = INITIAL_MONEY;
-          setGameState(prev => ({
-            ...prev,
-            money: resetMoney,
-            status: 'BETTING',
-            playerHands: [],
-            dealerHand: [],
-            message: '',
-          }));
-          setTempBet(0);
-          setChipsInPot([]);
-          onStatsUpdate(resetMoney, highScore, 0, false);
-        },
-      },
-    ]);
+    setShowRefreshConfirm(true);
+  };
+
+  const confirmRefreshReset = () => {
+    setShowRefreshConfirm(false);
+    const resetMoney = INITIAL_MONEY;
+    setGameState(prev => ({
+      ...prev,
+      money: resetMoney,
+      status: 'BETTING',
+      playerHands: [],
+      dealerHand: [],
+      message: '',
+    }));
+    setTempBet(0);
+    setChipsInPot([]);
+    onStatsUpdate(resetMoney, highScore, 0, false);
   };
 
   const handleBankruptcyReset = () => {
@@ -171,7 +154,7 @@ const App: React.FC<AppProps> = ({
     setGameState(prev => ({
       ...prev,
       money: resetMoney,
-      message: `$${INITIAL_MONEY} REFILL GRANTED`
+      message: ''
     }));
     setTempBet(0);
     setChipsInPot([]);
@@ -774,7 +757,7 @@ const App: React.FC<AppProps> = ({
             style={styles.settingsHeaderBtn}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Text style={styles.settingsHeaderIcon}>⚙</Text>
+            <Ionicons name="settings-outline" size={22} color="rgba(255,255,255,0.7)" />
           </TouchableOpacity>
         </View>
       </View>
@@ -996,14 +979,62 @@ const App: React.FC<AppProps> = ({
         </>
       )}
 
+      {/* Refresh Confirm Modal */}
+      <Modal
+        visible={showRefreshConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowRefreshConfirm(false)}
+      >
+        <View style={styles.confirmBackdrop}>
+          <View style={styles.confirmModal}>
+            <Text style={styles.confirmTitle}>
+              {language === 'tr' ? 'Emin misin?' : 'Are you sure?'}
+            </Text>
+            <Text style={styles.confirmMessage}>
+              {language === 'tr'
+                ? `$${INITIAL_MONEY} ile yeniden başlayacaksın.`
+                : `You will restart with $${INITIAL_MONEY}.`}
+            </Text>
+            <View style={styles.confirmButtons}>
+              <TouchableOpacity
+                style={styles.confirmCancelBtn}
+                onPress={() => setShowRefreshConfirm(false)}
+              >
+                <Text style={styles.confirmCancelText}>
+                  {language === 'tr' ? 'İptal' : 'Cancel'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmRestartBtn}
+                onPress={confirmRefreshReset}
+              >
+                <Text style={styles.confirmRestartText}>
+                  {language === 'tr' ? 'Başla' : 'Restart'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Bankruptcy Overlay */}
       {showBankruptcy && (
         <Animated.View style={[styles.overlay, { opacity: bankruptcyOpacity, zIndex: 200 }]}>
           <View style={styles.overlayContent}>
             <Text style={styles.bankruptcyTitle}>GAME OVER</Text>
-            <TouchableOpacity style={styles.bankruptcyBtn} onPress={handleBankruptcyReset}>
-              <Text style={styles.bankruptcyBtnText}>${INITIAL_MONEY} ENTRY</Text>
-            </TouchableOpacity>
+            <View style={styles.bankruptcyButtons}>
+              <TouchableOpacity style={styles.bankruptcyBtn} onPress={handleBankruptcyReset}>
+                <Text style={styles.bankruptcyBtnText}>
+                  {language === 'tr' ? 'YENİDEN BAŞLA' : 'RESTART'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.bankruptcyMenuBtn} onPress={() => { handleBankruptcyReset(); onGoToMenu?.(); }}>
+                <Text style={styles.bankruptcyMenuBtnText}>
+                  {language === 'tr' ? 'ANA MENÜ' : 'MAIN MENU'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </Animated.View>
       )}
@@ -1360,17 +1391,110 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   bankruptcyBtn: {
-    backgroundColor: '#7c3aed',
+    backgroundColor: '#f59e0b',
+    paddingHorizontal: 30,
+    paddingVertical: 12,
+    borderRadius: 25,
+    alignItems: 'center',
+    shadowColor: '#f59e0b',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  bankruptcyBtnText: {
+    color: '#1a1a1a',
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  bankruptcyButtons: {
+    gap: 12,
+    width: 220,
+  },
+  bankruptcyMenuBtn: {
     paddingHorizontal: 30,
     paddingVertical: 12,
     borderRadius: 25,
     borderWidth: 2,
-    borderColor: '#a78bfa',
+    borderColor: 'rgba(255,255,255,0.4)',
+    alignItems: 'center',
   },
-  bankruptcyBtnText: {
-    color: 'white',
-    fontSize: 18,
+  bankruptcyMenuBtnText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  confirmBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  confirmModal: {
+    backgroundColor: '#065f46',
+    borderRadius: 20,
+    paddingVertical: 28,
+    paddingHorizontal: 28,
+    width: width * 0.78,
+    borderWidth: 1,
+    borderColor: 'rgba(255,215,0,0.25)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  confirmTitle: {
+    fontSize: 20,
     fontWeight: '900',
+    color: '#FFD700',
+    textAlign: 'center',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  confirmMessage: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.75)',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  confirmButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  confirmCancelBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  confirmCancelText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.8)',
+  },
+  confirmRestartBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 30,
+    backgroundColor: '#f59e0b',
+    alignItems: 'center',
+    shadowColor: '#f59e0b',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  confirmRestartText: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#1a1a1a',
+    letterSpacing: 0.3,
   },
 });
 

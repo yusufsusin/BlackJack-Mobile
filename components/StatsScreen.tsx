@@ -8,6 +8,7 @@ import {
   StatusBar,
   Platform,
 } from 'react-native';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 interface Props {
   language: 'tr' | 'en';
@@ -45,19 +46,19 @@ const StatsScreen: React.FC<Props> = ({ language, highScore, totalGames, totalWi
 
         <View style={styles.cardsContainer}>
           <View style={styles.card}>
-            <Text style={styles.cardEmoji}>🏆</Text>
+            <Ionicons name="trophy-outline" size={22} color="#FFD700" style={{ marginRight: 16 }} />
             <Text style={styles.cardLabel}>{t.highScore}</Text>
             <Text style={styles.cardValue}>${highScore}</Text>
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.cardEmoji}>🎮</Text>
+            <MaterialCommunityIcons name="cards" size={22} color="#FFD700" style={{ marginRight: 16 }} />
             <Text style={styles.cardLabel}>{t.totalGames}</Text>
             <Text style={styles.cardValue}>{totalGames}</Text>
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.cardEmoji}>✅</Text>
+            <MaterialCommunityIcons name="check-bold" size={24} color="#FFD700" style={{ marginRight: 16 }} />
             <Text style={styles.cardLabel}>{t.totalWins}</Text>
             <Text style={styles.cardValue}>{totalWins}</Text>
           </View>
@@ -109,7 +110,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.08)',
   },
   cardEmoji: {
-    fontSize: 28,
+    fontSize: 20,
     marginRight: 16,
   },
   cardLabel: {
@@ -120,7 +121,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   cardValue: {
-    fontSize: 22,
+    fontSize: 17,
     fontWeight: '900',
     color: '#FFD700',
   },
