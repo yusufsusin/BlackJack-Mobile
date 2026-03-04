@@ -10,6 +10,7 @@ import {
   StatusBar,
   Platform,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 interface Props {
   onStartClassic: () => void;
@@ -77,7 +78,8 @@ const MainMenu: React.FC<Props> = ({ onStartClassic, onOpenSettings, onOpenStats
           >
             <Text style={styles.classicBtnText}>Classic</Text>
             <View style={styles.classicBtnBadge}>
-              <Text style={styles.classicBtnBadgeText}>🏆 ${highScore}</Text>
+              <Ionicons name="trophy-outline" size={13} color="#ffffff" style={{ marginRight: 4 }} />
+              <Text style={styles.classicBtnBadgeText}>${highScore}</Text>
             </View>
           </TouchableOpacity>
 
@@ -201,6 +203,8 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   classicBtnBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.12)',
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -209,8 +213,7 @@ const styles = StyleSheet.create({
   classicBtnBadgeText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#1a1a1a',
-    opacity: 0.75,
+    color: '#ffffff',
   },
   soonBtn: {
     backgroundColor: 'rgba(107,114,128,0.25)',
