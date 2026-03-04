@@ -17,52 +17,101 @@ const CARD_HEIGHT = isSmallDevice ? 80 : 100;
 export const Card: React.FC<CardProps> = ({ card, index }) => {
   const isRed = card.suit === '♥' || card.suit === '♦';
   const dealAnim = useRef(new Animated.Value(0)).current;
+  const flipAnim = useRef(new Animated.Value(card.isHidden ? 0 : 1)).current;
+  const randomRotation = useRef(Math.random() * 4 - 2).current; // ±2 degrees
 
   useEffect(() => {
-    Animated.timing(dealAnim, {
-      toValue: 1,
-      duration: 250,
-      delay: index * 50,
-      easing: Easing.out(Easing.quad),
+    // 4-Phase Animation Sequence
+    // Total duration: ~600ms
+    Animated.sequence([
+      // Phase 1: Preparation (100ms) - Pull back slightly
+      Animated.timing(dealAnim, {
+        toValue: 0.1,
+        duration: 100,
+        easing: Easing.bezier(0.4, 0, 0.2, 1),
+        useNativeDriver: true,
+      }),
+      // Phase 2 & 3: Fast Exit & Glide (500ms total)
+      Animated.timing(dealAnim, {
+        toValue: 1,
+        duration: 500,
+        easing: Easing.bezier(0.3, 0.1, 0.3, 1), // Fast start, very slow finish
+        delay: 0,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  useEffect(() => {
+    // Reveal flip
+    Animated.spring(flipAnim, {
+      toValue: card.isHidden ? 0 : 1,
+      friction: 8,
+      tension: 40,
       useNativeDriver: true,
     }).start();
-  }, [index]);
+  }, [card.isHidden]);
+
+  const rotateY = flipAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['180deg', '360deg'],
+  });
+
+  // dealAnim: 0 -> 0.1 (Pullback) -> 1 (Fly & Glide)
+  const translateY = dealAnim.interpolate({
+    inputRange: [0, 0.1, 0.3, 1],
+    outputRange: [-400, -405, -200, 0], // Pull back 5px, then shoot, then glide to 0
+  });
 
   const animatedStyle = {
-    opacity: dealAnim,
+    opacity: dealAnim.interpolate({
+      inputRange: [0, 0.1, 0.2],
+      outputRange: [0, 0, 1], // Wait for preparation to start before showing
+    }),
     transform: [
-      { translateY: dealAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) },
-      { scale: dealAnim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }) }
+      { translateY },
+      { scale: dealAnim.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) },
+      { rotate: dealAnim.interpolate({ inputRange: [0.8, 1], outputRange: ['0deg', `${randomRotation}deg`] }) },
+      { rotateY: rotateY }
     ]
   } as any;
 
-  if (card.isHidden) {
-    return (
-      <Animated.View style={[styles.card, styles.cardHidden, animatedStyle]}>
+  return (
+    <Animated.View style={[styles.card, animatedStyle]}>
+      <Animated.View style={[
+        StyleSheet.absoluteFill,
+        styles.cardFront,
+        { opacity: flipAnim.interpolate({ inputRange: [0, 0.5, 0.51, 1], outputRange: [0, 0, 1, 1] }) }
+      ]}>
+        <View style={styles.cardContent}>
+          <View style={styles.cardInfo}>
+            <Text style={[styles.cardRank, isRed && styles.textRed]}>{card.rank}</Text>
+            <Text style={[styles.cardSuitSmall, isRed && styles.textRed]}>{card.suit}</Text>
+          </View>
+          <View style={styles.centerSuitContainer}>
+            <Text style={[styles.centerSuit, isRed && styles.textRed]}>{card.suit}</Text>
+          </View>
+          <View style={styles.cardInfoBottom}>
+            <Text style={[styles.cardRank, isRed && styles.textRed]}>{card.rank}</Text>
+            <Text style={[styles.cardSuitSmall, isRed && styles.textRed]}>{card.suit}</Text>
+          </View>
+        </View>
+      </Animated.View>
+
+      <Animated.View style={[
+        StyleSheet.absoluteFill,
+        styles.cardHidden,
+        {
+          opacity: flipAnim.interpolate({ inputRange: [0, 0.49, 0.5, 1], outputRange: [1, 1, 0, 0] }),
+          transform: [{ rotateY: '180deg' }]
+        }
+      ]}>
         <View style={styles.cardHiddenInner}>
           <View style={styles.appleLogoContainer}>
             <Text style={styles.appleLogo}></Text>
           </View>
         </View>
       </Animated.View>
-    );
-  }
-
-  return (
-    <Animated.View style={[styles.card, animatedStyle]}>
-      <View style={styles.cardInfo}>
-        <Text style={[styles.cardRank, isRed && styles.textRed]}>{card.rank}</Text>
-        <Text style={[styles.cardSuitSmall, isRed && styles.textRed]}>{card.suit}</Text>
-      </View>
-
-      <View style={styles.centerSuitContainer}>
-        <Text style={[styles.centerSuit, isRed && styles.textRed]}>{card.suit}</Text>
-      </View>
-
-      <View style={styles.cardInfoBottom}>
-        <Text style={[styles.cardRank, isRed && styles.textRed]}>{card.rank}</Text>
-        <Text style={[styles.cardSuitSmall, isRed && styles.textRed]}>{card.suit}</Text>
-      </View>
     </Animated.View>
   );
 };
@@ -71,19 +120,25 @@ const styles = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
-    backgroundColor: 'white',
     borderRadius: 8,
-    padding: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 4,
     position: 'relative',
-    overflow: 'hidden',
+  },
+  cardFront: {
+    backgroundColor: 'white',
+    borderRadius: 8,
+  },
+  cardContent: {
+    flex: 1,
+    padding: 6,
   },
   cardHidden: {
     backgroundColor: '#1d4ed8', // blue-700
+    borderRadius: 8,
     borderWidth: 2,
     borderColor: 'white',
     justifyContent: 'center',
