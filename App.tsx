@@ -11,7 +11,8 @@ import {
   Platform,
   StatusBar,
   Easing,
-  ScrollView
+  ScrollView,
+  Alert,
 } from 'react-native';
 import { GameStatus, CardType, GameState, PlayerHand } from './types';
 import { createDeck, calculateHandValue, getBestValue, isBlackjack } from './utils/gameLogic';
@@ -88,7 +89,8 @@ interface AppProps {
   onChangeGameVolume: (v: number) => void;
   initialMoney: number;
   highScore: number;
-  onStatsUpdate: (money: number, highScore: number) => void;
+  language: 'tr' | 'en';
+  onStatsUpdate: (money: number, highScore: number, winsThisRound: number, isGameRound: boolean) => void;
 }
 
 const App: React.FC<AppProps> = ({
@@ -99,6 +101,7 @@ const App: React.FC<AppProps> = ({
   onChangeGameVolume,
   initialMoney,
   highScore,
+  language,
   onStatsUpdate,
 }) => {
   const [gameState, setGameState] = useState<GameState>({
@@ -124,6 +127,45 @@ const App: React.FC<AppProps> = ({
   const potScale = useRef(new Animated.Value(1)).current;
   const bankruptcyOpacity = useRef(new Animated.Value(0)).current;
 
+  const handleRefreshReset = () => {
+    const labels = {
+      tr: {
+        title: 'Emin misin?',
+        message: '$100 ile yeniden başlayacaksın.',
+        cancel: 'İptal',
+        confirm: 'Başla',
+      },
+      en: {
+        title: 'Are you sure?',
+        message: 'You will restart with $100.',
+        cancel: 'Cancel',
+        confirm: 'Restart',
+      },
+    };
+    const t = labels[language];
+    Alert.alert(t.title, t.message, [
+      { text: t.cancel, style: 'cancel' },
+      {
+        text: t.confirm,
+        style: 'destructive',
+        onPress: () => {
+          const resetMoney = INITIAL_MONEY;
+          setGameState(prev => ({
+            ...prev,
+            money: resetMoney,
+            status: 'BETTING',
+            playerHands: [],
+            dealerHand: [],
+            message: '',
+          }));
+          setTempBet(0);
+          setChipsInPot([]);
+          onStatsUpdate(resetMoney, highScore, 0, false);
+        },
+      },
+    ]);
+  };
+
   const handleBankruptcyReset = () => {
     const resetMoney = INITIAL_MONEY;
     setGameState(prev => ({
@@ -133,7 +175,7 @@ const App: React.FC<AppProps> = ({
     }));
     setTempBet(0);
     setChipsInPot([]);
-    onStatsUpdate(resetMoney, highScore);
+    onStatsUpdate(resetMoney, highScore, 0, false);
 
     // Hide overlay
     Animated.timing(bankruptcyOpacity, {
@@ -157,8 +199,11 @@ const App: React.FC<AppProps> = ({
 
   useEffect(() => {
     if (gameState.status === 'GAME_OVER') {
+      const winsCount = gameState.playerHands.filter(
+        h => h.result === 'WIN' || h.result === 'BLACKJACK'
+      ).length;
       const newHighScore = Math.max(gameState.money, highScore);
-      onStatsUpdate(gameState.money, newHighScore);
+      onStatsUpdate(gameState.money, newHighScore, winsCount, true);
     }
   }, [gameState.status]);
 
@@ -716,13 +761,22 @@ const App: React.FC<AppProps> = ({
           <Text style={styles.bankrollLabel}>BANKROLL</Text>
           <Text style={styles.bankrollValue}>${gameState.money}</Text>
         </View>
-        <TouchableOpacity
-          onPress={() => setShowSettings(true)}
-          style={styles.settingsHeaderBtn}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Text style={styles.settingsHeaderIcon}>⚙</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRightBtns}>
+          <TouchableOpacity
+            onPress={handleRefreshReset}
+            style={styles.settingsHeaderBtn}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text style={styles.settingsHeaderIcon}>↺</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setShowSettings(true)}
+            style={styles.settingsHeaderBtn}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text style={styles.settingsHeaderIcon}>⚙</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.table}>
@@ -982,6 +1036,11 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '900',
     color: '#FFD700', // Casino Gold
+  },
+  headerRightBtns: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   settingsHeaderBtn: {
     justifyContent: 'center',

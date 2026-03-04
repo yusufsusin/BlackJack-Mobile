@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import MainMenu from './components/MainMenu';
 import App from './App';
 import SettingsScreen, { Lang } from './components/SettingsScreen';
+import StatsScreen from './components/StatsScreen';
 import { supabase } from './lib/supabase';
 import { INITIAL_MONEY } from './constants';
 
-type Screen = 'MENU' | 'GAME' | 'SETTINGS';
+type Screen = 'MENU' | 'GAME' | 'SETTINGS' | 'STATS';
 
 const Root: React.FC = () => {
   const [screen, setScreen] = useState<Screen>('MENU');
@@ -14,6 +15,8 @@ const Root: React.FC = () => {
   const [gameVolume, setGameVolume] = useState(60);
   const [initialMoney, setInitialMoney] = useState<number | null>(null);
   const [highScore, setHighScore] = useState(INITIAL_MONEY);
+  const [totalGames, setTotalGames] = useState(0);
+  const [totalWins, setTotalWins] = useState(0);
 
   useEffect(() => {
     initSession();
@@ -41,7 +44,7 @@ const Root: React.FC = () => {
       // Fetch or create user stats
       const { data: stats, error: fetchError } = await supabase
         .from('user_stats')
-        .select('current_money, high_score')
+        .select('current_money, high_score, total_games, total_wins')
         .eq('id', userId)
         .single();
 
@@ -54,17 +57,26 @@ const Root: React.FC = () => {
         });
         setInitialMoney(INITIAL_MONEY);
         setHighScore(INITIAL_MONEY);
+        setTotalGames(0);
+        setTotalWins(0);
       } else {
         setInitialMoney(stats.current_money);
         setHighScore(stats.high_score);
+        setTotalGames(stats.total_games ?? 0);
+        setTotalWins(stats.total_wins ?? 0);
       }
     } catch {
       setInitialMoney(INITIAL_MONEY);
     }
   };
 
-  const handleStatsUpdate = async (newMoney: number, newHighScore: number) => {
+  const handleStatsUpdate = async (newMoney: number, newHighScore: number, winsThisRound: number, isGameRound: boolean) => {
+    const newTotalGames = isGameRound ? totalGames + 1 : totalGames;
+    const newTotalWins = totalWins + winsThisRound;
     setHighScore(newHighScore);
+    setInitialMoney(newMoney);
+    if (isGameRound) setTotalGames(newTotalGames);
+    if (winsThisRound > 0) setTotalWins(newTotalWins);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id;
@@ -73,6 +85,8 @@ const Root: React.FC = () => {
       await supabase.from('user_stats').update({
         current_money: newMoney,
         high_score: newHighScore,
+        total_games: newTotalGames,
+        total_wins: newTotalWins,
         updated_at: new Date().toISOString(),
       }).eq('id', userId);
     } catch {
@@ -94,11 +108,26 @@ const Root: React.FC = () => {
     );
   }
 
+  if (screen === 'STATS') {
+    return (
+      <StatsScreen
+        language={language}
+        highScore={highScore}
+        totalGames={totalGames}
+        totalWins={totalWins}
+        onBack={() => setScreen('MENU')}
+      />
+    );
+  }
+
   if (screen === 'MENU') {
     return (
       <MainMenu
         onStartClassic={() => setScreen('GAME')}
         onOpenSettings={() => setScreen('SETTINGS')}
+        onOpenStats={() => setScreen('STATS')}
+        language={language}
+        highScore={highScore}
       />
     );
   }
@@ -115,6 +144,7 @@ const Root: React.FC = () => {
       onChangeGameVolume={setGameVolume}
       initialMoney={initialMoney}
       highScore={highScore}
+      language={language}
       onStatsUpdate={handleStatsUpdate}
     />
   );
