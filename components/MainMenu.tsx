@@ -14,9 +14,12 @@ import {
 interface Props {
   onStartClassic: () => void;
   onOpenSettings: () => void;
+  onOpenStats: () => void;
+  language: 'tr' | 'en';
+  highScore: number;
 }
 
-const MainMenu: React.FC<Props> = ({ onStartClassic, onOpenSettings }) => {
+const MainMenu: React.FC<Props> = ({ onStartClassic, onOpenSettings, onOpenStats, language, highScore }) => {
   const spinValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -73,6 +76,9 @@ const MainMenu: React.FC<Props> = ({ onStartClassic, onOpenSettings }) => {
             activeOpacity={0.8}
           >
             <Text style={styles.classicBtnText}>Classic</Text>
+            <View style={styles.classicBtnBadge}>
+              <Text style={styles.classicBtnBadgeText}>🏆 ${highScore}</Text>
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -83,8 +89,14 @@ const MainMenu: React.FC<Props> = ({ onStartClassic, onOpenSettings }) => {
             <Text style={styles.soonBtnText}>Blackjack + (Soon)</Text>
           </TouchableOpacity>
 
+          <TouchableOpacity style={styles.statsBtn} onPress={onOpenStats} activeOpacity={0.8}>
+            <Text style={styles.statsBtnText}>
+              {language === 'tr' ? 'İstatistikler' : 'Statistics'}
+            </Text>
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.settingsBtn} onPress={onOpenSettings} activeOpacity={0.8}>
-            <Text style={styles.settingsBtnText}>Settings</Text>
+            <Text style={styles.settingsBtnText}>{language === 'tr' ? 'Ayarlar' : 'Settings'}</Text>
           </TouchableOpacity>
         </View>
 
@@ -168,20 +180,37 @@ const styles = StyleSheet.create({
   },
   classicBtn: {
     backgroundColor: '#deb737',
-    paddingVertical: 17,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
     borderRadius: 32,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     shadowColor: '#FCD34D',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    elevation: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
   },
   classicBtnText: {
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#1a1a1a',
+    letterSpacing: 1,
+  },
+  classicBtnBadge: {
+    backgroundColor: 'rgba(0,0,0,0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  classicBtnBadgeText: {
+    fontSize: 13,
     fontWeight: '700',
     color: '#1a1a1a',
-    letterSpacing: 0.3,
+    opacity: 0.75,
   },
   soonBtn: {
     backgroundColor: 'rgba(107,114,128,0.25)',
@@ -195,6 +224,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#6b7280',
+    letterSpacing: 0.3,
+  },
+  statsBtn: {
+    backgroundColor: '#065f46',
+    paddingVertical: 17,
+    borderRadius: 32,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  statsBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.88)',
     letterSpacing: 0.3,
   },
   settingsBtn: {
